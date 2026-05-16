@@ -108,13 +108,30 @@ export const tiendanubeRouter = createRouter({
     // === ETAPA 3: Eliminar los que ya no estan en Tiendanube ===
     let deleted = 0;
     if (seenSlugs.length > 0) {
-      // Build IN clause
-      const placeholders = seenSlugs.map(() => "?").join(",");
-      const result = await getDb().execute(sql.raw(
-        `DELETE FROM products WHERE slug IS NOT NULL AND slug NOT IN (${placeholders})`,
-        ...seenSlugs
-      ));
-      deleted = Number((result as any)?.[0]?.affectedRows ?? 0);
+      const slugsSet = new Set(seenSlugs);
+      // Get all existing slugs
+      const existingSlugs = await getDb()
+        .select({ id: products.id, slug: products.slug })
+        .from(products)
+        .where(sql`${products.slug} IS NOT NULL`);
+
+      const toDelete: number[] = [];
+      for (const row of existingSlugs) {
+        if (row.slug && !slugsSet.has(row.slug)) {
+          toDelete.push(row.id);
+        }
+      }
+
+      // Delete in batches of 50
+      const batchSize = 50;
+      for (let i = 0; i < toDelete.length; i += batchSize) {
+        const batch = toDelete.slice(i, i + batchSize);
+        const placeholders = batch.map(() => "?").join(",");
+        await getDb().execute(
+          sql.raw(`DELETE FROM products WHERE id IN (${placeholders})`, ...batch)
+        );
+      }
+      deleted = toDelete.length;
     }
 
     return { imported, deleted };
