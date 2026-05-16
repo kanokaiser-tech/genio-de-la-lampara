@@ -3,9 +3,8 @@ import { getDb } from "./queries/connection";
 import { settings, products } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-// Tiendanube API response types
 interface TnCategory {
-  name?: { es?: string } | string;
+  name?: { es?: string; en?: string; pt?: string } | string;
 }
 
 interface TnImage {
@@ -18,17 +17,17 @@ interface TnVariant {
 
 interface TnProduct {
   id: number;
-  name?: { es?: string } | string;
+  name?: { es?: string; en?: string; pt?: string } | string;
   variants?: TnVariant[];
   price?: number;
   categories?: TnCategory[];
   images?: TnImage[];
 }
 
-function extractName(name: { es?: string } | string | undefined): string {
+function extractName(name: { es?: string; en?: string; pt?: string } | string | undefined): string {
   if (!name) return "Sin nombre";
   if (typeof name === "string") return name;
-  return name.es ?? "Sin nombre";
+  return name.es ?? name.en ?? name.pt ?? "Sin nombre";
 }
 
 function extractCategoryName(categories: TnCategory[] | undefined): string {
@@ -36,7 +35,7 @@ function extractCategoryName(categories: TnCategory[] | undefined): string {
   const cat = categories[0];
   if (!cat.name) return "Sin categoria";
   if (typeof cat.name === "string") return cat.name;
-  return cat.name.es ?? "Sin categoria";
+  return cat.name.es ?? cat.name.en ?? cat.name.pt ?? "Sin categoria";
 }
 
 export const tiendanubeRouter = createRouter({
@@ -47,25 +46,27 @@ export const tiendanubeRouter = createRouter({
     }
 
     const allTiendanubeIds: string[] = [];
-    let offset = 0;
-    const limit = 200;
+    const perPage = 200;
+    let page = 1;
     let hasMore = true;
     let totalImported = 0;
 
-    // Paginate through ALL products from Tiendanube
+    // Paginate using Tiendanube's page/per_page params (NOT limit/offset)
     while (hasMore) {
       const resp = await fetch(
-        `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?limit=${limit}&offset=${offset}`,
+        `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?per_page=${perPage}&page=${page}`,
         {
           headers: {
             Authentication: `bearer ${s.tiendanubeApiToken}`,
             "Content-Type": "application/json",
+            "User-Agent": "GenioResellerApp (admin@genio.com)",
           },
         }
       );
 
       if (!resp.ok) {
-        throw new Error(`Tiendanube API error: ${resp.status}`);
+        const errText = await resp.text().catch(() => "");
+        throw new Error(`Tiendanube API error: ${resp.status} - ${errText}`);
       }
 
       const items = (await resp.json()) as TnProduct[];
@@ -114,10 +115,11 @@ export const tiendanubeRouter = createRouter({
         totalImported++;
       }
 
-      if (items.length < limit) {
+      // If we got fewer than perPage items, we've reached the end
+      if (items.length < perPage) {
         hasMore = false;
       } else {
-        offset += limit;
+        page++;
       }
     }
 
@@ -148,9 +150,12 @@ export const tiendanubeRouter = createRouter({
     if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) return { ok: false };
     try {
       const resp = await fetch(
-        `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?limit=1`,
+        `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?per_page=1`,
         {
-          headers: { Authentication: `bearer ${s.tiendanubeApiToken}` },
+          headers: {
+            Authentication: `bearer ${s.tiendanubeApiToken}`,
+            "User-Agent": "GenioResellerApp (admin@genio.com)",
+          },
         }
       );
       return { ok: resp.ok };
