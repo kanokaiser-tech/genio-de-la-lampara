@@ -22,7 +22,15 @@ function WhatsAppIcon({ className }: { className?: string }) {
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
-type OrderItemPDF = { productName: string; quantity: number; price: number; subtotal: number };
+type OrderItemPDF = {
+  productName: string;
+  quantity: number;
+  unitList: number;   // precio de lista
+  unitPrice: number;  // precio con descuento
+  unitProfit: number; // ganancia por unidad
+  subtotal: number;   // subtotal con descuento
+  profitSubtotal: number; // ganancia total de esta linea
+};
 
 export default function CartPage() {
   const { user } = useAuth();
@@ -33,7 +41,7 @@ export default function CartPage() {
   );
   const [notes, setNotes] = useState("");
   const [pdfGenerated, setPdfGenerated] = useState(false);
-  const [orderTotal, setOrderTotal] = useState(0);
+  const [orderMeta, setOrderMeta] = useState({ total: 0, totalList: 0, totalProfit: 0 });
   const orderItemsRef = useRef<OrderItemPDF[]>([]);
 
   /* query: cart */
@@ -55,43 +63,107 @@ export default function CartPage() {
   const items = cart?.map(c => ({ ...c.cartItems, product: c.products })) ?? [];
   const total = items.reduce((s, i) => s + Number(i.product[priceKey]) * i.quantity, 0);
   const totalList = items.reduce((s, i) => s + Number(i.product.priceList) * i.quantity, 0);
+  const totalProfit = totalList - total;
   const savings = totalList - total;
 
   /* ---------------------------------------------------------------- */
-  /*  PDF generator                                                    */
+  /*  PDF generator  —  con GANANCIA NETA                              */
   /* ---------------------------------------------------------------- */
-  const generatePDF = useCallback((orderItems: OrderItemPDF[], finalTotal: number) => {
+  const generatePDF = useCallback((orderItems: OrderItemPDF[], meta: { total: number; totalList: number; totalProfit: number }) => {
     const doc = new jsPDF();
+
+    /* --- Header --- */
     doc.setFontSize(18);
     doc.text("Genio de la Lampara - Pedido", 14, 20);
     doc.setFontSize(10);
     doc.text(`Fecha: ${new Date().toLocaleDateString("es-AR")}`, 14, 30);
     doc.text(`Revendedor: ${user?.name ?? ""}`, 14, 36);
-    doc.text(`Pago: ${paymentType === "efectivo" ? "Efectivo (30% descuento)" : "Transferencia (25% descuento)"}`, 14, 42);
+    doc.text(`Pago: ${paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}`, 14, 42);
     if (notes) doc.text(`Notas: ${notes}`, 14, 48);
 
-    let y = notes ? 54 : 48;
-    doc.setFontSize(10);
-    doc.text("Producto", 14, y);
-    doc.text("Cant.", 120, y);
-    doc.text("P.Unit", 145, y);
-    doc.text("Subtotal", 175, y);
-    doc.line(14, y + 2, 196, y + 2);
-    y += 10;
-    doc.setFontSize(9);
+    /* --- Column positions (A4 = 210mm) --- */
+    const colProd = 14;
+    const colCant = 76;
+    const colList = 93;
+    const colDisc = 115;
+    const colGan = 138;
+    const colSub = 161;
+    const rightEdge = 196;
 
+    let y = notes ? 56 : 50;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("Producto", colProd, y);
+    doc.text("Cant", colCant, y, { align: "center" });
+    doc.text("Lista", colList, y, { align: "right" });
+    doc.text("Tu Precio", colDisc, y, { align: "right" });
+    doc.text("Ganancia", colGan, y, { align: "right" });
+    doc.text("Subtotal", colSub, y, { align: "right" });
+    doc.line(colProd, y + 2, rightEdge, y + 2);
+    y += 8;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+
+    /* --- Rows --- */
     orderItems.forEach(item => {
-      doc.text(item.productName.substring(0, 55), 14, y);
-      doc.text(String(item.quantity), 125, y);
-      doc.text(`$${item.price.toLocaleString("es-AR")}`, 145, y);
-      doc.text(`$${item.subtotal.toLocaleString("es-AR")}`, 175, y);
-      y += 7;
+      /* product name – wrap if needed */
+      const name = item.productName;
+      if (name.length > 38) {
+        doc.text(name.substring(0, 38), colProd, y);
+      } else {
+        doc.text(name, colProd, y);
+      }
+
+      doc.text(String(item.quantity), colCant, y, { align: "center" });
+      doc.text(`$${item.unitList.toLocaleString("es-AR")}`, colList, y, { align: "right" });
+      doc.text(`$${item.unitPrice.toLocaleString("es-AR")}`, colDisc, y, { align: "right" });
+
+      /* Ganancia in green */
+      doc.setTextColor(34, 197, 94); // green
+      doc.text(`+$${item.unitProfit.toLocaleString("es-AR")}`, colGan, y, { align: "right" });
+      doc.setTextColor(0, 0, 0); // back to black
+
+      doc.text(`$${item.subtotal.toLocaleString("es-AR")}`, colSub, y, { align: "right" });
+      y += 6;
+
+      /* page break if needed */
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
     });
 
-    doc.line(14, y + 2, 196, y + 2);
+    /* --- Separator --- */
+    doc.line(colProd, y + 2, rightEdge, y + 2);
     y += 10;
-    doc.setFontSize(12);
-    doc.text(`TOTAL: $${finalTotal.toLocaleString("es-AR")}`, 14, y);
+
+    /* --- Totals block --- */
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+
+    doc.text("Total Precio Lista:", 120, y);
+    doc.text(`$${meta.totalList.toLocaleString("es-AR")}`, 175, y, { align: "right" });
+    y += 7;
+
+    doc.text("Tu Precio (con descuento):", 120, y);
+    doc.setFont("helvetica", "bold");
+    doc.text(`$${meta.total.toLocaleString("es-AR")}`, 175, y, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    y += 7;
+
+    doc.setTextColor(34, 197, 94);
+    doc.setFont("helvetica", "bold");
+    doc.text("GANANCIA NETA TOTAL:", 120, y);
+    doc.text(`+$${meta.totalProfit.toLocaleString("es-AR")}`, 175, y, { align: "right" });
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    y += 7;
+
+    const pct = meta.totalList > 0 ? Math.round((meta.totalProfit / meta.totalList) * 100) : 0;
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Margen de ganancia: ${pct}%`, 120, y);
+    doc.setTextColor(0, 0, 0);
 
     doc.save(`pedido-genio-${Date.now()}.pdf`);
   }, [user?.name, paymentType, notes]);
@@ -102,18 +174,29 @@ export default function CartPage() {
   const handleOrder = () => {
     if (items.length === 0) return;
 
-    const orderItems = items.map(item => {
-      const price = Number(item.product[priceKey]);
-      return { productName: item.product.name, quantity: item.quantity, price, subtotal: price * item.quantity };
+    const orderItems: OrderItemPDF[] = items.map(item => {
+      const unitList = Number(item.product.priceList);
+      const unitPrice = Number(item.product[priceKey]);
+      return {
+        productName: item.product.name,
+        quantity: item.quantity,
+        unitList,
+        unitPrice,
+        unitProfit: unitList - unitPrice,
+        subtotal: unitPrice * item.quantity,
+        profitSubtotal: (unitList - unitPrice) * item.quantity,
+      };
     });
+
     orderItemsRef.current = orderItems;
-    setOrderTotal(total);
+    const meta = { total, totalList, totalProfit };
+    setOrderMeta(meta);
 
     createOrder.mutate(
       { paymentType, notes: notes || undefined },
       {
         onSuccess: () => {
-          setTimeout(() => { generatePDF(orderItems, total); setPdfGenerated(true); }, 300);
+          setTimeout(() => { generatePDF(orderItems, meta); setPdfGenerated(true); }, 300);
         },
       }
     );
@@ -121,7 +204,7 @@ export default function CartPage() {
 
   const handleReDownloadPDF = () => {
     if (orderItemsRef.current.length > 0) {
-      generatePDF(orderItemsRef.current, orderTotal);
+      generatePDF(orderItemsRef.current, orderMeta);
     }
   };
 
@@ -130,12 +213,13 @@ export default function CartPage() {
   /* ---------------------------------------------------------------- */
   const buildWhatsAppMessage = (): string => {
     const lines = orderItemsRef.current.map(
-      item => `• ${item.productName} x${item.quantity} = $${item.subtotal.toLocaleString("es-AR")}`
+      item => `• ${item.productName} x${item.quantity} = $${item.subtotal.toLocaleString("es-AR")} (Gana: +$${item.profitSubtotal.toLocaleString("es-AR")})`
     );
     const msg =
       `Hola ${myAdmin?.name ?? ""}! Te envio mi pedido de Genio de la Lampara:\n\n` +
       lines.join("\n") +
-      `\n\n*Total: $${orderTotal.toLocaleString("es-AR")}*` +
+      `\n\nTu precio total: $${orderMeta.total.toLocaleString("es-AR")}` +
+      `\nGanancia neta: +$${orderMeta.totalProfit.toLocaleString("es-AR")}` +
       `\nPago: ${paymentType === "efectivo" ? "Efectivo (30% descuento)" : "Transferencia (25% descuento)"}` +
       (notes ? `\nNotas: ${notes}` : "") +
       `\nRevendedor: ${user?.name ?? ""}`;
@@ -147,7 +231,7 @@ export default function CartPage() {
     : null;
 
   /* ---------------------------------------------------------------- */
-  /*  Render helpers                                                    */
+  /*  Render                                                            */
   /* ---------------------------------------------------------------- */
   if (isLoading) {
     return (
@@ -170,23 +254,47 @@ export default function CartPage() {
           <p className="text-zinc-400">Tu PDF se descargo automaticamente.</p>
         </div>
 
-        {/* Tarjeta de resumen */}
+        {/* Tarjeta de resumen con GANANCIA */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 mb-6">
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Resumen del pedido</h3>
-          <div className="space-y-2 text-sm mb-4 max-h-48 overflow-y-auto pr-1">
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Resumen de tu pedido</h3>
+
+          {/* Items con ganancia */}
+          <div className="space-y-2 text-sm mb-4 max-h-56 overflow-y-auto pr-1">
             {orderItemsRef.current.map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center py-1 border-b border-zinc-800/50 last:border-0">
-                <div className="flex-1 min-w-0 mr-3">
+              <div key={idx} className="flex justify-between items-start py-1 border-b border-zinc-800/50 last:border-0">
+                <div className="flex-1 min-w-0 mr-2">
                   <p className="truncate text-zinc-200">{item.productName}</p>
-                  <p className="text-xs text-zinc-500">x{item.quantity} @ ${item.price.toLocaleString("es-AR")}</p>
+                  <p className="text-xs text-zinc-500">
+                    x{item.quantity} | Lista: ${item.unitList.toLocaleString("es-AR")} → Tu precio: ${item.unitPrice.toLocaleString("es-AR")}
+                  </p>
                 </div>
-                <span className="font-medium text-zinc-200 whitespace-nowrap">${item.subtotal.toLocaleString("es-AR")}</span>
+                <div className="text-right shrink-0">
+                  <p className="font-medium text-zinc-200">${item.subtotal.toLocaleString("es-AR")}</p>
+                  <p className="text-xs text-green-400">+${item.profitSubtotal.toLocaleString("es-AR")} ganancia</p>
+                </div>
               </div>
             ))}
           </div>
-          <div className="border-t border-zinc-700 pt-3 flex justify-between items-center">
-            <span className="font-bold text-lg">Total</span>
-            <span className="font-bold text-lg text-yellow-500">${orderTotal.toLocaleString("es-AR")}</span>
+
+          {/* Totales */}
+          <div className="border-t border-zinc-700 pt-3 space-y-2">
+            <div className="flex justify-between text-sm text-zinc-400">
+              <span>Total Precio Lista</span>
+              <span className="line-through">${orderMeta.totalList.toLocaleString("es-AR")}</span>
+            </div>
+            <div className="flex justify-between font-bold text-lg">
+              <span className="text-zinc-200">Tu precio</span>
+              <span className="text-yellow-500">${orderMeta.total.toLocaleString("es-AR")}</span>
+            </div>
+            <div className="flex justify-between font-bold text-green-400 bg-green-500/10 rounded-lg px-3 py-2">
+              <span>GANANCIA NETA</span>
+              <span>+${orderMeta.totalProfit.toLocaleString("es-AR")}</span>
+            </div>
+            {orderMeta.totalList > 0 && (
+              <p className="text-xs text-green-500 text-center">
+                Margen: {Math.round((orderMeta.totalProfit / orderMeta.totalList) * 100)}%
+              </p>
+            )}
           </div>
           {notes && <p className="text-xs text-zinc-500 mt-2 italic">Notas: {notes}</p>}
         </div>
@@ -312,7 +420,9 @@ export default function CartPage() {
             <div className="flex justify-between text-zinc-400"><span>Precio lista</span><span className="line-through">{formatPrice(totalList)}</span></div>
             <div className="flex justify-between text-zinc-400"><span>Tu descuento ({paymentType === "efectivo" ? "30%" : "25%"})</span><span className="text-green-400">-{formatPrice(savings)}</span></div>
             <div className="border-t border-zinc-800 pt-2 flex justify-between font-bold text-lg"><span>Total</span><span className="text-yellow-500">{formatPrice(total)}</span></div>
-            <div className="text-xs text-green-400">Ahorro: {formatPrice(savings)}</div>
+            <div className="text-xs text-green-400 font-medium bg-green-500/10 rounded px-2 py-1 text-center">
+              Tu ganancia: +{formatPrice(totalProfit)} ({totalList > 0 ? Math.round((totalProfit / totalList) * 100) : 0}%)
+            </div>
           </div>
 
           {/* Notes */}
@@ -327,7 +437,7 @@ export default function CartPage() {
             {createOrder.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <FileText className="w-5 h-5 mr-2" />}
             {createOrder.isPending ? "Generando..." : "Generar Pedido"}
           </Button>
-          <p className="text-zinc-500 text-xs text-center mt-2">Se descargara el PDF automaticamente</p>
+          <p className="text-zinc-500 text-xs text-center mt-2">Se descargara el PDF con tu ganancia detallada</p>
         </div>
       </div>
     </div>
