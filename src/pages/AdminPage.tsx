@@ -176,7 +176,15 @@ export default function AdminPage() {
               <Button onClick={() => sync.mutate()} disabled={sync.isPending} className="bg-yellow-500 hover:bg-yellow-600 text-black">{sync.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />} Sincronizar</Button>
               <Button onClick={() => test.mutate()} variant="outline" className="border-zinc-700">Probar conexion</Button>
             </div>
-            {sync.isSuccess && <p className="text-green-400 text-sm mt-3">{sync.data.imported} productos importados</p>}
+            {sync.isSuccess && (
+              <div className="mt-3 space-y-1">
+                <p className="text-green-400 text-sm">{sync.data.imported} productos importados/actualizados</p>
+                {sync.data.deleted !== undefined && sync.data.deleted > 0 && (
+                  <p className="text-orange-400 text-sm">{sync.data.deleted} productos eliminados (no estaban en Tiendanube)</p>
+                )}
+                <p className="text-zinc-500 text-xs">La lista ahora coincide exactamente con tu tienda Tiendanube</p>
+              </div>
+            )}
             {sync.isError && <p className="text-red-400 text-sm mt-3">Error: {sync.error.message}</p>}
             {test.isSuccess && <p className={`text-sm mt-3 ${test.data.ok ? "text-green-400" : "text-red-400"}`}>{test.data.ok ? "Conexion OK" : "Fallo la conexion"}</p>}
           </div>
