@@ -1,7 +1,7 @@
 import { createRouter, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { settings, products } from "@db/schema";
-import { eq, sql } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 
 interface TnProduct {
   id: number;
@@ -126,10 +126,7 @@ export const tiendanubeRouter = createRouter({
       const batchSize = 50;
       for (let i = 0; i < toDelete.length; i += batchSize) {
         const batch = toDelete.slice(i, i + batchSize);
-        const placeholders = batch.map(() => "?").join(",");
-        await getDb().execute(
-          sql.raw(`DELETE FROM products WHERE id IN (${placeholders})`, ...batch)
-        );
+        await getDb().delete(products).where(inArray(products.id, batch));
       }
       deleted = toDelete.length;
     }

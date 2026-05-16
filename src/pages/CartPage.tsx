@@ -1,40 +1,66 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ShoppingCart, ArrowLeft, FileText, Loader2 } from "lucide-react";
+import { ShoppingCart, ArrowLeft, FileText, Loader2, Download, MessageCircle, User } from "lucide-react";
 import { Link } from "react-router";
 import jsPDF from "jspdf";
+
+/* ------------------------------------------------------------------ */
+/*  WhatsApp SVG icon                                                  */
+/* ------------------------------------------------------------------ */
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+type OrderItemPDF = { productName: string; quantity: number; price: number; subtotal: number };
 
 export default function CartPage() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
-  const [paymentType, setPaymentType] = useState<"efectivo" | "transferencia">((user?.discountType as "efectivo" | "transferencia") ?? "efectivo");
+
+  const [paymentType, setPaymentType] = useState<"efectivo" | "transferencia">(
+    (user?.discountType as "efectivo" | "transferencia") ?? "efectivo"
+  );
   const [notes, setNotes] = useState("");
   const [pdfGenerated, setPdfGenerated] = useState(false);
   const [orderTotal, setOrderTotal] = useState(0);
-  const orderItemsRef = useRef<{ productName: string; quantity: number; price: number; subtotal: number }[]>([]);
+  const orderItemsRef = useRef<OrderItemPDF[]>([]);
 
+  /* query: cart */
   const { data: cart, isLoading } = trpc.cart.get.useQuery();
   const updateQty = trpc.cart.updateQuantity.useMutation({ onSuccess: () => utils.cart.get.invalidate() });
   const removeItem = trpc.cart.remove.useMutation({ onSuccess: () => utils.cart.get.invalidate() });
   const createOrder = trpc.order.create.useMutation({
-    onSuccess: () => {
-      utils.cart.get.invalidate();
-      utils.order.myOrders.invalidate();
-    },
+    onSuccess: () => { utils.cart.get.invalidate(); utils.order.myOrders.invalidate(); },
   });
 
-  const priceField: "products.priceCash30" | "products.priceTransfer25" = paymentType === "efectivo" ? "products.priceCash30" : "products.priceTransfer25";
+  /* query: admin asignado (solo cuando se necesita) */
+  const { data: myAdmin } = trpc.user.myAdmin.useQuery(undefined, { enabled: pdfGenerated });
+
+  /* helpers de precios */
+  const priceField: "products.priceCash30" | "products.priceTransfer25" =
+    paymentType === "efectivo" ? "products.priceCash30" : "products.priceTransfer25";
+  const priceKey = priceField.split(".")[1] as "priceCash30" | "priceTransfer25";
 
   const items = cart?.map(c => ({ ...c.cartItems, product: c.products })) ?? [];
-  const total = items.reduce((s, i) => s + Number(i.product[priceField.split(".")[1] as "priceCash30" | "priceTransfer25"]) * i.quantity, 0);
+  const total = items.reduce((s, i) => s + Number(i.product[priceKey]) * i.quantity, 0);
   const totalList = items.reduce((s, i) => s + Number(i.product.priceList) * i.quantity, 0);
   const savings = totalList - total;
 
-  const generatePDF = (orderItems: typeof orderItemsRef.current, finalTotal: number) => {
+  /* ---------------------------------------------------------------- */
+  /*  PDF generator                                                    */
+  /* ---------------------------------------------------------------- */
+  const generatePDF = useCallback((orderItems: OrderItemPDF[], finalTotal: number) => {
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.text("Genio de la Lampara - Pedido", 14, 20);
@@ -44,7 +70,7 @@ export default function CartPage() {
     doc.text(`Pago: ${paymentType === "efectivo" ? "Efectivo (30% descuento)" : "Transferencia (25% descuento)"}`, 14, 42);
     if (notes) doc.text(`Notas: ${notes}`, 14, 48);
 
-    let y = 58;
+    let y = notes ? 54 : 48;
     doc.setFontSize(10);
     doc.text("Producto", 14, y);
     doc.text("Cant.", 120, y);
@@ -68,69 +94,178 @@ export default function CartPage() {
     doc.text(`TOTAL: $${finalTotal.toLocaleString("es-AR")}`, 14, y);
 
     doc.save(`pedido-genio-${Date.now()}.pdf`);
-  };
+  }, [user?.name, paymentType, notes]);
 
+  /* ---------------------------------------------------------------- */
+  /*  Handlers                                                         */
+  /* ---------------------------------------------------------------- */
   const handleOrder = () => {
     if (items.length === 0) return;
 
-    // Prepare items for PDF
     const orderItems = items.map(item => {
-      const price = Number(item.product[priceField.split(".")[1] as "priceCash30" | "priceTransfer25"]);
-      return {
-        productName: item.product.name,
-        quantity: item.quantity,
-        price,
-        subtotal: price * item.quantity,
-      };
+      const price = Number(item.product[priceKey]);
+      return { productName: item.product.name, quantity: item.quantity, price, subtotal: price * item.quantity };
     });
     orderItemsRef.current = orderItems;
     setOrderTotal(total);
 
-    // Create order in backend
     createOrder.mutate(
       { paymentType, notes: notes || undefined },
       {
         onSuccess: () => {
-          // Generate PDF after order is created
-          setTimeout(() => {
-            generatePDF(orderItems, total);
-            setPdfGenerated(true);
-          }, 300);
+          setTimeout(() => { generatePDF(orderItems, total); setPdfGenerated(true); }, 300);
         },
       }
     );
   };
 
-  if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-yellow-500 animate-spin" /></div>;
+  const handleReDownloadPDF = () => {
+    if (orderItemsRef.current.length > 0) {
+      generatePDF(orderItemsRef.current, orderTotal);
+    }
+  };
 
-  if (items.length === 0 && !pdfGenerated) {
+  /* ---------------------------------------------------------------- */
+  /*  WhatsApp helpers                                                  */
+  /* ---------------------------------------------------------------- */
+  const buildWhatsAppMessage = (): string => {
+    const lines = orderItemsRef.current.map(
+      item => `• ${item.productName} x${item.quantity} = $${item.subtotal.toLocaleString("es-AR")}`
+    );
+    const msg =
+      `Hola ${myAdmin?.name ?? ""}! Te envio mi pedido de Genio de la Lampara:\n\n` +
+      lines.join("\n") +
+      `\n\n*Total: $${orderTotal.toLocaleString("es-AR")}*` +
+      `\nPago: ${paymentType === "efectivo" ? "Efectivo (30% descuento)" : "Transferencia (25% descuento)"}` +
+      (notes ? `\nNotas: ${notes}` : "") +
+      `\nRevendedor: ${user?.name ?? ""}`;
+    return encodeURIComponent(msg);
+  };
+
+  const whatsappUrl = myAdmin?.phone
+    ? `https://wa.me/${myAdmin.phone.replace(/\D/g, "")}?text=${buildWhatsAppMessage()}`
+    : null;
+
+  /* ---------------------------------------------------------------- */
+  /*  Render helpers                                                    */
+  /* ---------------------------------------------------------------- */
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
+      </div>
+    );
+  }
+
+  /* ====== PANTALLA DE EXITO ====== */
+  if (pdfGenerated) {
+    return (
+      <div className="max-w-lg mx-auto py-12 px-4">
+        {/* Header check */}
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-5 ring-4 ring-green-500/5">
+            <FileText className="w-10 h-10 text-green-500" />
+          </div>
+          <h2 className="text-3xl font-bold mb-2">Pedido generado!</h2>
+          <p className="text-zinc-400">Tu PDF se descargo automaticamente.</p>
+        </div>
+
+        {/* Tarjeta de resumen */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 mb-6">
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Resumen del pedido</h3>
+          <div className="space-y-2 text-sm mb-4 max-h-48 overflow-y-auto pr-1">
+            {orderItemsRef.current.map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center py-1 border-b border-zinc-800/50 last:border-0">
+                <div className="flex-1 min-w-0 mr-3">
+                  <p className="truncate text-zinc-200">{item.productName}</p>
+                  <p className="text-xs text-zinc-500">x{item.quantity} @ ${item.price.toLocaleString("es-AR")}</p>
+                </div>
+                <span className="font-medium text-zinc-200 whitespace-nowrap">${item.subtotal.toLocaleString("es-AR")}</span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-zinc-700 pt-3 flex justify-between items-center">
+            <span className="font-bold text-lg">Total</span>
+            <span className="font-bold text-lg text-yellow-500">${orderTotal.toLocaleString("es-AR")}</span>
+          </div>
+          {notes && <p className="text-xs text-zinc-500 mt-2 italic">Notas: {notes}</p>}
+        </div>
+
+        {/* Info del admin asignado */}
+        {myAdmin && (
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 mb-5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center shrink-0">
+              <User className="w-5 h-5 text-yellow-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-zinc-200 truncate">{myAdmin.name}</p>
+              <p className="text-xs text-zinc-500">Tu administrador asignado</p>
+            </div>
+            {myAdmin.phone && <span className="text-xs text-zinc-400 shrink-0">{myAdmin.phone}</span>}
+          </div>
+        )}
+
+        {/* ===== BOTON PRINCIPAL: WHATSAPP ===== */}
+        <div className="space-y-3 mb-8">
+          {whatsappUrl ? (
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="block">
+              <Button
+                className="w-full py-7 text-lg font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 transition-all hover:shadow-xl hover:shadow-green-900/30 hover:-translate-y-0.5"
+                size="lg"
+              >
+                <WhatsAppIcon className="w-6 h-6 mr-3" />
+                Enviar pedido por WhatsApp
+              </Button>
+            </a>
+          ) : (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-center">
+              <MessageCircle className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+              <p className="text-sm text-zinc-400">Tu administrador no tiene numero de WhatsApp configurado.</p>
+              <p className="text-xs text-zinc-500 mt-1">Contactalo por otro medio.</p>
+            </div>
+          )}
+
+          {/* Boton secundario: re-descargar PDF */}
+          <Button
+            variant="outline"
+            className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white py-5"
+            onClick={handleReDownloadPDF}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Descargar PDF de nuevo
+          </Button>
+        </div>
+
+        {/* Accion secundaria */}
+        <div className="text-center">
+          <Link to="/productos">
+            <Button variant="ghost" className="text-zinc-400 hover:text-white">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Seguir comprando
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  /* ====== CARRITO VACIO ====== */
+  if (items.length === 0) {
     return (
       <div className="max-w-xl mx-auto text-center py-20">
         <ShoppingCart className="w-16 h-16 text-zinc-600 mx-auto mb-6" />
         <h2 className="text-2xl font-bold mb-2">Tu pedido esta vacio</h2>
         <p className="text-zinc-400 mb-6">Agrega productos para armar tu pedido.</p>
-        <Link to="/productos"><Button className="bg-yellow-500 hover:bg-yellow-600 text-black"><ArrowLeft className="w-4 h-4 mr-2" /> Ver productos</Button></Link>
+        <Link to="/productos">
+          <Button className="bg-yellow-500 hover:bg-yellow-600 text-black">
+            <ArrowLeft className="w-4 h-4 mr-2" /> Ver productos
+          </Button>
+        </Link>
       </div>
     );
   }
 
-  if (pdfGenerated) {
-    return (
-      <div className="max-w-xl mx-auto text-center py-20">
-        <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-          <FileText className="w-8 h-8 text-green-500" />
-        </div>
-        <h2 className="text-2xl font-bold mb-2">Pedido generado!</h2>
-        <p className="text-zinc-400 mb-2">El PDF se descargo automaticamente.</p>
-        <p className="text-zinc-500 text-sm mb-6">Compartilo con tu administrador por WhatsApp o email.</p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link to="/productos"><Button className="bg-yellow-500 hover:bg-yellow-600 text-black"><ArrowLeft className="w-4 h-4 mr-2" /> Seguir comprando</Button></Link>
-          <Link to="/mis-pedidos"><Button variant="outline" className="border-zinc-700">Ver mis pedidos</Button></Link>
-        </div>
-      </div>
-    );
-  }
-
+  /* ====== CARRITO CON ITEMS ====== */
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center gap-4 mb-6">
@@ -145,7 +280,7 @@ export default function CartPage() {
             <div key={item.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{item.product.name}</p>
-                <p className="text-yellow-500 font-semibold text-sm mt-1">{formatPrice(item.product[priceField.split(".")[1] as "priceCash30" | "priceTransfer25"])} c/u</p>
+                <p className="text-yellow-500 font-semibold text-sm mt-1">{formatPrice(item.product[priceKey])} c/u</p>
                 <p className="text-xs text-zinc-500 line-through">Lista: {formatPrice(item.product.priceList)}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -153,7 +288,7 @@ export default function CartPage() {
                 <span className="w-8 text-center font-medium">{item.quantity}</span>
                 <button onClick={() => updateQty.mutate({ productId: item.productId, quantity: item.quantity + 1 })} className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 hover:bg-zinc-700 text-lg font-bold">+</button>
               </div>
-              <p className="font-semibold text-sm w-24 text-right">{formatPrice(Number(item.product[priceField.split(".")[1] as "priceCash30" | "priceTransfer25"]) * item.quantity)}</p>
+              <p className="font-semibold text-sm w-24 text-right">{formatPrice(Number(item.product[priceKey]) * item.quantity)}</p>
               <button onClick={() => removeItem.mutate({ productId: item.productId })} className="p-2 text-zinc-500 hover:text-red-400 text-sm">Eliminar</button>
             </div>
           ))}
