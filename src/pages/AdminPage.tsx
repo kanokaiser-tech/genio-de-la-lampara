@@ -104,19 +104,41 @@ export default function AdminPage() {
         <TabsContent value="revendedores" className="space-y-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <h3 className="font-semibold mb-3">Nuevo revendedor</h3>
-            <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
-              <Input placeholder="Nombre" value={newRev.name} onChange={e => setNewRev({ ...newRev, name: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Email" type="email" value={newRev.email} onChange={e => setNewRev({ ...newRev, email: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Telefono" value={newRev.phone} onChange={e => setNewRev({ ...newRev, phone: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Contrasena" type="password" value={newRev.password} onChange={e => setNewRev({ ...newRev, password: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <select value={newRev.discountType} onChange={e => setNewRev({ ...newRev, discountType: e.target.value as "efectivo" | "transferencia" })} className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 text-sm text-white">
-                <option value="efectivo">Efectivo 30%</option><option value="transferencia">Transfer 25%</option>
-              </select>
-              <select value={newRev.parentId} onChange={e => setNewRev({ ...newRev, parentId: e.target.value })} className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 text-sm text-white">
-                <option value="">-- Asignar a --</option>
-                {admins?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-              <Button onClick={() => cRev.mutate({ ...newRev, parentId: newRev.parentId ? Number(newRev.parentId) : undefined })} disabled={!newRev.name || !newRev.email || !newRev.password} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Crear</Button>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Nombre</label>
+                <Input placeholder="Nombre completo" value={newRev.name} onChange={e => setNewRev({ ...newRev, name: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Email</label>
+                <Input placeholder="Email" type="email" value={newRev.email} onChange={e => setNewRev({ ...newRev, email: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Telefono</label>
+                <Input placeholder="Telefono" value={newRev.phone} onChange={e => setNewRev({ ...newRev, phone: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Contrasena</label>
+                <Input placeholder="Contrasena" type="password" value={newRev.password} onChange={e => setNewRev({ ...newRev, password: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Tipo de descuento</label>
+                <select value={newRev.discountType} onChange={e => setNewRev({ ...newRev, discountType: e.target.value as "efectivo" | "transferencia" })} className="w-full h-9 bg-zinc-800 border border-zinc-700 rounded-lg px-3 text-sm text-white">
+                  <option value="efectivo">Efectivo -30%</option>
+                  <option value="transferencia">Transferencia -25%</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-yellow-500 mb-1 block font-medium">Administrador asignado</label>
+                <select value={newRev.parentId} onChange={e => setNewRev({ ...newRev, parentId: e.target.value })} className="w-full h-9 bg-zinc-800 border border-yellow-500/40 rounded-lg px-3 text-sm text-white focus:ring-1 focus:ring-yellow-500">
+                  <option value="">-- Seleccionar administrador --</option>
+                  {admins?.map(a => <option key={a.id} value={a.id}>{a.name} ({a.email})</option>)}
+                </select>
+                {!newRev.parentId && <p className="text-xs text-zinc-600 mt-1">Si no seleccionas, se asigna a vos automaticamente.</p>}
+              </div>
+              <div className="flex items-end">
+                <Button onClick={() => cRev.mutate({ ...newRev, parentId: newRev.parentId ? Number(newRev.parentId) : undefined })} disabled={!newRev.name || !newRev.email || !newRev.password} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Crear revendedor</Button>
+              </div>
             </div>
           </div>
           {lr ? <Loader2 className="w-6 h-6 text-yellow-500 animate-spin mx-auto" /> : (
@@ -128,15 +150,29 @@ export default function AdminPage() {
                   <div key={r.id} className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
                     {editing === r.id ? (
                       <>
-                        <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                        <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                        <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[10px] text-zinc-500">Nombre</label>
+                          <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[10px] text-zinc-500">Email</label>
+                          <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[10px] text-zinc-500">Telefono</label>
+                          <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                        </div>
                         <div />
-                        <select value={editForm.parentId} onChange={e => setEditForm({ ...editForm, parentId: e.target.value })} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 text-sm text-white h-8">
-                          {admins?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
-                        <Button size="sm" onClick={() => upUser.mutate({ id: r.id, name: editForm.name, email: editForm.email, phone: editForm.phone, parentId: editForm.parentId ? Number(editForm.parentId) : null })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2"><X className="w-3 h-3" /></Button>
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[10px] text-yellow-500 font-medium">Cambiar admin</label>
+                          <select value={editForm.parentId} onChange={e => setEditForm({ ...editForm, parentId: e.target.value })} className="bg-zinc-800 border border-yellow-500/40 rounded-lg px-2 text-sm text-white h-8 w-full focus:ring-1 focus:ring-yellow-500">
+                            {admins?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex gap-1 pt-4">
+                          <Button size="sm" onClick={() => upUser.mutate({ id: r.id, name: editForm.name, email: editForm.email, phone: editForm.phone, parentId: editForm.parentId ? Number(editForm.parentId) : null })} className="bg-green-600 hover:bg-green-700 h-8 px-2" title="Guardar"><Check className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2" title="Cancelar"><X className="w-3 h-3" /></Button>
+                        </div>
                         <div />
                       </>
                     ) : (
