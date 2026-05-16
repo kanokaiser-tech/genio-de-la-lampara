@@ -14,12 +14,12 @@ export default function AdminPage() {
 
   // New forms
   const [newProd, setNewProd] = useState({ name: "", category: "", priceList: "", stock: "0" });
-  const [newRev, setNewRev] = useState({ name: "", email: "", phone: "", password: "", discountType: "efectivo" as "efectivo" | "transferencia" });
+  const [newRev, setNewRev] = useState({ name: "", email: "", phone: "", password: "", discountType: "efectivo" as "efectivo" | "transferencia", parentId: "" });
   const [newAdmin, setNewAdmin] = useState({ name: "", email: "", phone: "", password: "" });
 
   // Edit form
   const [editing, setEditing] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", parentId: "" });
 
   // Password change
   const [changePass, setChangePass] = useState<{ id: number; name: string } | null>(null);
@@ -27,8 +27,9 @@ export default function AdminPage() {
 
   // Data
   const { data: products, isLoading: lp } = trpc.product.list.useQuery();
-  const { data: revs, isLoading: lr } = trpc.user.myRevendedores.useQuery();
+  const { data: allUsers, isLoading: lr } = trpc.user.list.useQuery();
   const { data: admins } = trpc.user.listAdmins.useQuery();
+  const revs = allUsers?.filter(u => u.role === "revendedor") ?? [];
   const { data: orders, isLoading: lo } = trpc.order.myOrdersAsAdmin.useQuery();
   const { data: settings } = trpc.settings.get.useQuery();
 
@@ -36,11 +37,17 @@ export default function AdminPage() {
   const cProd = trpc.product.create.useMutation({ onSuccess: () => { utils.product.list.invalidate(); setNewProd({ name: "", category: "", priceList: "", stock: "0" }); } });
   const dProd = trpc.product.delete.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const clProd = trpc.product.clearAll.useMutation({ onSuccess: () => utils.product.list.invalidate() });
-  const cRev = trpc.user.createRevendedor.useMutation({ onSuccess: () => { utils.user.myRevendedores.invalidate(); setNewRev({ name: "", email: "", phone: "", password: "", discountType: "efectivo" }); } });
+  const cRev = trpc.user.createRevendedor.useMutation({
+    onSuccess: () => {
+      utils.user.list.invalidate();
+      utils.user.listAdmins.invalidate();
+      setNewRev({ name: "", email: "", phone: "", password: "", discountType: "efectivo", parentId: "" });
+    }
+  });
   const cAdmin = trpc.user.createAdmin.useMutation({ onSuccess: () => { utils.user.listAdmins.invalidate(); setNewAdmin({ name: "", email: "", phone: "", password: "" }); } });
   const dUser = trpc.user.delete.useMutation({ onSuccess: () => { utils.user.myRevendedores.invalidate(); utils.user.listAdmins.invalidate(); } });
   const chPass = trpc.user.changePassword.useMutation({ onSuccess: () => { setChangePass(null); setNewPassword(""); } });
-  const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.myRevendedores.invalidate(); utils.user.listAdmins.invalidate(); setEditing(null); } });
+  const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); setEditing(null); } });
   const upSet = trpc.settings.update.useMutation({ onSuccess: () => utils.settings.get.invalidate() });
   const sync = trpc.tiendanube.sync.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const test = trpc.tiendanube.test.useMutation();
@@ -49,7 +56,7 @@ export default function AdminPage() {
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-  const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "" }); };
+  const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "", parentId: user.parentId ? String(user.parentId) : "" }); };
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -97,7 +104,7 @@ export default function AdminPage() {
         <TabsContent value="revendedores" className="space-y-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <h3 className="font-semibold mb-3">Nuevo revendedor</h3>
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
               <Input placeholder="Nombre" value={newRev.name} onChange={e => setNewRev({ ...newRev, name: e.target.value })} className="bg-zinc-800 border-zinc-700" />
               <Input placeholder="Email" type="email" value={newRev.email} onChange={e => setNewRev({ ...newRev, email: e.target.value })} className="bg-zinc-800 border-zinc-700" />
               <Input placeholder="Telefono" value={newRev.phone} onChange={e => setNewRev({ ...newRev, phone: e.target.value })} className="bg-zinc-800 border-zinc-700" />
@@ -105,35 +112,48 @@ export default function AdminPage() {
               <select value={newRev.discountType} onChange={e => setNewRev({ ...newRev, discountType: e.target.value as "efectivo" | "transferencia" })} className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 text-sm text-white">
                 <option value="efectivo">Efectivo 30%</option><option value="transferencia">Transfer 25%</option>
               </select>
-              <Button onClick={() => cRev.mutate(newRev)} disabled={!newRev.name || !newRev.email || !newRev.password} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Crear</Button>
+              <select value={newRev.parentId} onChange={e => setNewRev({ ...newRev, parentId: e.target.value })} className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 text-sm text-white">
+                <option value="">-- Asignar a --</option>
+                {admins?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+              <Button onClick={() => cRev.mutate({ ...newRev, parentId: newRev.parentId ? Number(newRev.parentId) : undefined })} disabled={!newRev.name || !newRev.email || !newRev.password} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Crear</Button>
             </div>
           </div>
           {lr ? <Loader2 className="w-6 h-6 text-yellow-500 animate-spin mx-auto" /> : (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-              <div className="grid grid-cols-[1fr,200px,120px,100px,80px,80px,80px] gap-4 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase items-center"><span>Nombre</span><span>Email</span><span>Telefono</span><span>Descuento</span><span></span><span></span><span></span></div>
-              {revs?.map(r => (
-                <div key={r.id} className="grid grid-cols-[1fr,200px,120px,100px,80px,80px,80px] gap-4 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
-                  {editing === r.id ? (
-                    <>
-                      <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                      <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                      <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                      <div />
-                      <Button size="sm" onClick={() => upUser.mutate({ id: r.id, ...editForm })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2"><X className="w-3 h-3" /></Button>
-                      <div />
-                    </>
-                  ) : (
-                    <>
-                      <span>{r.name}</span><span className="text-zinc-400">{r.email}</span><span className="text-zinc-400">{r.phone || "-"}</span>
-                      <Badge variant="outline" className="text-yellow-500 border-yellow-500/30 w-fit">{r.discountType === "efectivo" ? "30%" : "25%"}</Badge>
-                      <button onClick={() => startEdit(r)} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => setChangePass({ id: r.id, name: r.name })} className="text-zinc-500 hover:text-yellow-400 flex justify-center"><Lock className="w-4 h-4" /></button>
-                      <button onClick={() => dUser.mutate({ id: r.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
-                    </>
-                  )}
-                </div>
-              ))}
+              <div className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase items-center"><span>Nombre</span><span>Email</span><span>Telefono</span><span>Desc.</span><span>Admin asignado</span><span></span><span></span><span></span></div>
+              {revs?.map(r => {
+                const assignedAdmin = admins?.find(a => a.id === r.parentId);
+                return (
+                  <div key={r.id} className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
+                    {editing === r.id ? (
+                      <>
+                        <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                        <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                        <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                        <div />
+                        <select value={editForm.parentId} onChange={e => setEditForm({ ...editForm, parentId: e.target.value })} className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 text-sm text-white h-8">
+                          {admins?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                        <Button size="sm" onClick={() => upUser.mutate({ id: r.id, name: editForm.name, email: editForm.email, phone: editForm.phone, parentId: editForm.parentId ? Number(editForm.parentId) : null })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2"><X className="w-3 h-3" /></Button>
+                        <div />
+                      </>
+                    ) : (
+                      <>
+                        <span className="truncate">{r.name}</span>
+                        <span className="text-zinc-400 truncate">{r.email}</span>
+                        <span className="text-zinc-400">{r.phone || "-"}</span>
+                        <Badge variant="outline" className="text-yellow-500 border-yellow-500/30 w-fit text-xs">{r.discountType === "efectivo" ? "30%" : "25%"}</Badge>
+                        <span className="text-zinc-300 text-xs truncate" title={assignedAdmin?.email}>{assignedAdmin?.name || <span className="text-zinc-600">Sin asignar</span>}</span>
+                        <button onClick={() => startEdit(r)} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => setChangePass({ id: r.id, name: r.name })} className="text-zinc-500 hover:text-yellow-400 flex justify-center"><Lock className="w-4 h-4" /></button>
+                        <button onClick={() => dUser.mutate({ id: r.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
               {(!revs || revs.length === 0) && <div className="text-center py-8 text-zinc-500 text-sm">No hay revendedores</div>}
             </div>
           )}
@@ -170,7 +190,7 @@ export default function AdminPage() {
                     <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
                     <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
                     <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                    <Button size="sm" onClick={() => upUser.mutate({ id: a.id, ...editForm })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
+                    <Button size="sm" onClick={() => upUser.mutate({ id: a.id, name: editForm.name, email: editForm.email, phone: editForm.phone })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2"><X className="w-3 h-3" /></Button>
                     <div />
                   </>

@@ -21,11 +21,14 @@ export const userRouter = createRouter({
       phone: z.string().optional(),
       password: z.string().min(4),
       discountType: z.enum(["efectivo", "transferencia"]).default("efectivo"),
+      parentId: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { password, ...data } = input;
+      const { password, parentId, ...data } = input;
       const hashed = await hashPassword(password);
-      const id = await createUser({ ...data, password: hashed, role: "revendedor", parentId: ctx.user.id });
+      // Si no se especifica parentId, se asigna al admin actual
+      const assignedAdminId = parentId ?? ctx.user.id;
+      const id = await createUser({ ...data, password: hashed, role: "revendedor", parentId: assignedAdminId });
       return { id };
     }),
 
