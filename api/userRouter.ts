@@ -1,103 +1,72 @@
 import { z } from "zod";
-import { createRouter, adminQuery, superadminQuery, authedQuery } from "./middleware";
-import {
-  getAllUsers,
-  getUsersByRole,
-  getRevendedoresByAdminId,
-  getAdmins,
-  createUser,
-  updateUser,
-  deleteUser,
-  findUserById,
-} from "./queries/users";
+import { createRouter, adminQuery, authedQuery } from "./middleware";
+import { getAllUsers, getUsersByRole, getRevendedoresByAdminId, getAdmins, createUser, updateUser, deleteUser, findUserById } from "./queries/users";
+import { hashPassword } from "./localAuth";
 
 export const userRouter = createRouter({
-  // List all users - superadmin only
-  list: superadminQuery.query(async () => {
-    return getAllUsers();
-  }),
+  list: adminQuery.query(async () => getAllUsers()),
 
-  // List users by role - admin/superadmin
   byRole: adminQuery
-    .input(z.object({ role: z.enum(["admin", "revendedor", "superadmin", "user"]) }))
-    .query(async ({ input }) => {
-      return getUsersByRole(input.role);
-    }),
+    .input(z.object({ role: z.enum(["admin", "revendedor"]) }))
+    .query(async ({ input }) => getUsersByRole(input.role)),
 
-  // Get revendedores assigned to current admin
-  myRevendedores: adminQuery.query(async ({ ctx }) => {
-    return getRevendedoresByAdminId(ctx.user.id);
-  }),
+  myRevendedores: adminQuery.query(async ({ ctx }) => getRevendedoresByAdminId(ctx.user.id)),
 
-  // Get all admins - for superadmin to assign revendedores
-  listAdmins: superadminQuery.query(async () => {
-    return getAdmins();
-  }),
+  listAdmins: adminQuery.query(async () => getAdmins()),
 
-  // Create a new revendedor (admin creates for their team)
   createRevendedor: adminQuery
-    .input(
-      z.object({
-        name: z.string().min(1),
-        email: z.string().email(),
-        phone: z.string().optional(),
-        unionId: z.string().min(1),
-        discountType: z.enum(["efectivo", "transferencia"]).default("efectivo"),
-      })
-    )
+    .input(z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      phone: z.string().optional(),
+      password: z.string().min(4),
+      discountType: z.enum(["efectivo", "transferencia"]).default("efectivo"),
+    }))
     .mutation(async ({ ctx, input }) => {
-      const id = await createUser({
-        ...input,
-        role: "revendedor",
-        parentId: ctx.user.id,
-        avatar: null,
-        lastSignInAt: new Date(),
-      });
+      const { password, ...data } = input;
+      const hashed = await hashPassword(password);
+      const id = await createUser({ ...data, password: hashed, role: "revendedor", parentId: ctx.user.id });
       return { id };
     }),
 
-  // Superadmin creates an admin
-  createAdmin: superadminQuery
-    .input(
-      z.object({
-        name: z.string().min(1),
-        email: z.string().email(),
-        phone: z.string().optional(),
-        unionId: z.string().min(1),
-      })
-    )
+  createAdmin: adminQuery
+    .input(z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      phone: z.string().optional(),
+      password: z.string().min(4),
+    }))
     .mutation(async ({ input }) => {
-      const id = await createUser({
-        ...input,
-        role: "admin",
-        discountType: "efectivo",
-        parentId: null,
-        avatar: null,
-        lastSignInAt: new Date(),
-      });
+      const { password, ...data } = input;
+      const hashed = await hashPassword(password);
+      const id = await createUser({ ...data, password: hashed, role: "admin", parentId: null });
       return { id };
     }),
 
-  // Update a user (change role, discount, assign admin)
   update: adminQuery
-    .input(
-      z.object({
-        id: z.number(),
-        name: z.string().optional(),
-        email: z.string().email().optional(),
-        phone: z.string().optional(),
-        role: z.enum(["superadmin", "admin", "revendedor", "user"]).optional(),
-        discountType: z.enum(["efectivo", "transferencia"]).optional(),
-        parentId: z.number().nullable().optional(),
-      })
-    )
+    .input(z.object({
+      id: z.number(),
+      name: z.string().optional(),
+      email: z.string().email().optional(),
+      phone: z.string().optional(),
+      role: z.enum(["admin", "revendedor"]).optional(),
+      discountType: z.enum(["efectivo", "transferencia"]).optional(),
+      parentId: z.number().nullable().optional(),
+    }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
       await updateUser(id, data);
       return { success: true };
     }),
 
-  // Delete a user
+  changePassword: adminQuery
+    .input(z.object({ id: z.number(), newPassword: z.string().min(4) }))
+    .mutation(async ({ input }) => {
+      const hashed = await hashPassword(input.newPassword);
+      await updateUser(input.id, { password: hashed });
+      return { success: true };
+    }),
+
   delete: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
@@ -105,11 +74,8 @@ export const userRouter = createRouter({
       return { success: true };
     }),
 
-  // Get current user's admin info (for revendedores)
   myAdmin: authedQuery.query(async ({ ctx }) => {
-    if (ctx.user.role !== "revendedor" || !ctx.user.parentId) {
-      return null;
-    }
+    if (ctx.user.role !== "revendedor" || !ctx.user.parentId) return null;
     return findUserById(ctx.user.parentId);
   }),
 });

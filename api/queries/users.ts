@@ -1,103 +1,55 @@
 import { eq, and } from "drizzle-orm";
-import * as schema from "@db/schema";
-import type { InsertUser } from "@db/schema";
 import { getDb } from "./connection";
-import { env } from "../lib/env";
+import { users } from "@db/schema";
+import type { InsertUser } from "@db/schema";
 
-export async function findUserByUnionId(unionId: string) {
-  const rows = await getDb()
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.unionId, unionId))
-    .limit(1);
+export async function findUserByEmail(email: string) {
+  const rows = await getDb().select().from(users).where(eq(users.email, email)).limit(1);
   return rows.at(0);
 }
 
 export async function findUserById(id: number) {
-  const rows = await getDb()
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, id))
-    .limit(1);
+  const rows = await getDb().select().from(users).where(eq(users.id, id)).limit(1);
   return rows.at(0);
 }
 
-export async function findUserByEmail(email: string) {
-  const rows = await getDb()
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.email, email))
-    .limit(1);
+// Legacy functions for Kimi auth compatibility
+export async function findUserByUnionId(unionId: string) {
+  const rows = await getDb().select().from(users).where(eq(users.email, unionId)).limit(1);
   return rows.at(0);
-}
-
-export async function getAllUsers() {
-  return getDb().select().from(schema.users);
-}
-
-export async function getUsersByRole(role: "superadmin" | "admin" | "revendedor" | "user") {
-  return getDb()
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.role, role));
-}
-
-export async function getRevendedoresByAdminId(adminId: number) {
-  return getDb()
-    .select()
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.role, "revendedor"),
-        eq(schema.users.parentId, adminId)
-      )
-    );
-}
-
-export async function getAdmins() {
-  return getDb()
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.role, "admin"));
 }
 
 export async function upsertUser(data: InsertUser) {
   const values = { ...data };
-  const updateSet: Partial<InsertUser> = {
-    lastSignInAt: new Date(),
-    ...data,
-  };
+  const updateSet: Partial<InsertUser> = { ...data };
+  await getDb().insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+}
 
-  // First login (app creator) becomes superadmin
-  if (
-    values.role === undefined &&
-    values.unionId &&
-    values.unionId === env.ownerUnionId
-  ) {
-    values.role = "superadmin";
-    updateSet.role = "superadmin";
-  }
+export async function getAllUsers() {
+  return getDb().select().from(users);
+}
 
-  await getDb()
-    .insert(schema.users)
-    .values(values)
-    .onDuplicateKeyUpdate({ set: updateSet });
+export async function getUsersByRole(role: "admin" | "revendedor") {
+  return getDb().select().from(users).where(eq(users.role, role));
+}
+
+export async function getRevendedoresByAdminId(adminId: number) {
+  return getDb().select().from(users).where(and(eq(users.role, "revendedor"), eq(users.parentId, adminId)));
+}
+
+export async function getAdmins() {
+  return getDb().select().from(users).where(eq(users.role, "admin"));
 }
 
 export async function createUser(data: InsertUser) {
-  const result = await getDb().insert(schema.users).values(data).$returningId();
+  const result = await getDb().insert(users).values(data).$returningId();
   return result[0]?.id;
 }
 
 export async function updateUser(id: number, data: Partial<InsertUser>) {
-  await getDb()
-    .update(schema.users)
-    .set(data)
-    .where(eq(schema.users.id, id));
+  await getDb().update(users).set(data).where(eq(users.id, id));
 }
 
 export async function deleteUser(id: number) {
-  await getDb()
-    .delete(schema.users)
-    .where(eq(schema.users.id, id));
+  await getDb().delete(users).where(eq(users.id, id));
 }

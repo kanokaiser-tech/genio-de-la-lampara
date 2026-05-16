@@ -8,7 +8,7 @@ import { tiendanubeRouter } from "./tiendanubeRouter";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
-  ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
+  ping: publicQuery.query(() => ({ ok: true })),
   auth: authRouter,
   user: userRouter,
   product: productRouter,

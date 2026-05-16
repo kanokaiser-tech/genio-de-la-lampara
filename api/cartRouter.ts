@@ -1,60 +1,40 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
-import {
-  getCartWithProducts,
-  addToCart,
-  updateCartItemQuantity,
-  removeFromCart,
-  clearCart,
-} from "./queries/cart";
+import { getDb } from "./queries/connection";
+import { cartItems, products } from "@db/schema";
+import { eq, and } from "drizzle-orm";
 
 export const cartRouter = createRouter({
-  // Get cart with product details
   get: authedQuery.query(async ({ ctx }) => {
-    return getCartWithProducts(ctx.user.id);
+    return getDb().select().from(cartItems).innerJoin(products, eq(cartItems.productId, products.id)).where(eq(cartItems.userId, ctx.user.id));
   }),
 
-  // Add item to cart
-  add: authedQuery
-    .input(
-      z.object({
-        productId: z.number(),
-        quantity: z.number().int().min(1),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      await addToCart({
-        userId: ctx.user.id,
-        productId: input.productId,
-        quantity: input.quantity,
-      });
-      return { success: true };
-    }),
+  add: authedQuery.input(z.object({ productId: z.number(), quantity: z.number().int().min(1) })).mutation(async ({ ctx, input }) => {
+    const existing = await getDb().select().from(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId))).limit(1);
+    if (existing[0]) {
+      await getDb().update(cartItems).set({ quantity: existing[0].quantity + input.quantity }).where(eq(cartItems.id, existing[0].id));
+    } else {
+      await getDb().insert(cartItems).values({ userId: ctx.user.id, productId: input.productId, quantity: input.quantity });
+    }
+    return { success: true };
+  }),
 
-  // Update quantity
-  updateQuantity: authedQuery
-    .input(
-      z.object({
-        productId: z.number(),
-        quantity: z.number().int().min(0),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      await updateCartItemQuantity(ctx.user.id, input.productId, input.quantity);
-      return { success: true };
-    }),
+  updateQuantity: authedQuery.input(z.object({ productId: z.number(), quantity: z.number().int().min(0) })).mutation(async ({ ctx, input }) => {
+    if (input.quantity <= 0) {
+      await getDb().delete(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId)));
+    } else {
+      await getDb().update(cartItems).set({ quantity: input.quantity }).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId)));
+    }
+    return { success: true };
+  }),
 
-  // Remove item
-  remove: authedQuery
-    .input(z.object({ productId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      await removeFromCart(ctx.user.id, input.productId);
-      return { success: true };
-    }),
+  remove: authedQuery.input(z.object({ productId: z.number() })).mutation(async ({ ctx, input }) => {
+    await getDb().delete(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId)));
+    return { success: true };
+  }),
 
-  // Clear cart
   clear: authedQuery.mutation(async ({ ctx }) => {
-    await clearCart(ctx.user.id);
+    await getDb().delete(cartItems).where(eq(cartItems.userId, ctx.user.id));
     return { success: true };
   }),
 });

@@ -11,35 +11,22 @@ import {
   boolean,
 } from "drizzle-orm/mysql-core";
 
-// ============================================================
-// Users - Kimi OAuth authentication with 3 roles
-// ============================================================
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
-  unionId: varchar("unionId", { length: 255 }).notNull().unique(),
-  name: varchar("name", { length: 255 }),
-  email: varchar("email", { length: 320 }),
-  avatar: text("avatar"),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
   phone: varchar("phone", { length: 50 }),
-  role: mysqlEnum("role", ["superadmin", "admin", "revendedor", "user"])
-    .default("user")
-    .notNull(),
+  role: mysqlEnum("role", ["admin", "revendedor"]).default("revendedor").notNull(),
   parentId: bigint("parentId", { mode: "number", unsigned: true }),
   discountType: mysqlEnum("discountType", ["efectivo", "transferencia"]).default("efectivo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
-  lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// ============================================================
-// Products - imported from Tiendanube or created manually
-// ============================================================
 export const products = mysqlTable("products", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 500 }).notNull(),
@@ -52,42 +39,28 @@ export const products = mysqlTable("products", {
   tiendanubeId: varchar("tiendanubeId", { length: 100 }),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = typeof products.$inferInsert;
 
-// ============================================================
-// Orders - pedidos de revendedores
-// ============================================================
 export const orders = mysqlTable("orders", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
   adminId: bigint("adminId", { mode: "number", unsigned: true }).notNull(),
-  status: mysqlEnum("status", ["pending", "approved", "rejected"])
-    .default("pending")
-    .notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
   paymentType: mysqlEnum("paymentType", ["efectivo", "transferencia"]).notNull(),
   notes: text("notes"),
   totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }).notNull(),
   webhookSent: boolean("webhookSent").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
 
-// ============================================================
-// Order Items - productos dentro de cada pedido
-// ============================================================
 export const orderItems = mysqlTable("orderItems", {
   id: serial("id").primaryKey(),
   orderId: bigint("orderId", { mode: "number", unsigned: true }).notNull(),
@@ -101,27 +74,18 @@ export const orderItems = mysqlTable("orderItems", {
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = typeof orderItems.$inferInsert;
 
-// ============================================================
-// Cart Items - carrito persistente por usuario
-// ============================================================
 export const cartItems = mysqlTable("cartItems", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
   productId: bigint("productId", { mode: "number", unsigned: true }).notNull(),
   quantity: int("quantity").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type CartItem = typeof cartItems.$inferSelect;
 export type InsertCartItem = typeof cartItems.$inferInsert;
 
-// ============================================================
-// Settings - configuracion global de la tienda
-// ============================================================
 export const settings = mysqlTable("settings", {
   id: serial("id").primaryKey(),
   storeName: varchar("storeName", { length: 255 }).default("Genio de la Lampara").notNull(),
@@ -130,10 +94,7 @@ export const settings = mysqlTable("settings", {
   tiendanubeStoreId: varchar("tiendanubeStoreId", { length: 100 }),
   webhookUrl: text("webhookUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type Setting = typeof settings.$inferSelect;

@@ -102,11 +102,14 @@ export function createOAuthCallbackHandler() {
       }
 
       await upsertUser({
-        unionId: userId,
-        name: userProfile.name,
-        avatar: userProfile.avatar_url,
+        email: userId + "@kimi.local",
+        name: userProfile.name ?? "Kimi User",
+        password: "kimi-oauth-not-used",
+        role: "admin",
+        parentId: null,
+        discountType: "efectivo",
         lastSignInAt: new Date(),
-      });
+      } as any);
 
       const token = await signSessionToken({
         unionId: userId,

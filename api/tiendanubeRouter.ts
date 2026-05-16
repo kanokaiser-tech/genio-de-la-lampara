@@ -1,8 +1,9 @@
 import { createRouter, adminQuery } from "./middleware";
-import { getSettings } from "./queries/settings";
-import { upsertProductByTiendanubeId } from "./queries/products";
+import { getDb } from "./queries/connection";
+import { settings, products } from "@db/schema";
+import { eq } from "drizzle-orm";
 
-interface TiendanubeProduct {
+interface TnProduct {
   id: number;
   name: { es?: string } | string;
   price: number;
@@ -12,100 +13,55 @@ interface TiendanubeProduct {
 }
 
 export const tiendanubeRouter = createRouter({
-  // Sync products from Tiendanube
   sync: adminQuery.mutation(async () => {
-    const settings = await getSettings();
-    if (!settings?.tiendanubeApiToken || !settings?.tiendanubeStoreId) {
-      throw new Error("Tiendanube credentials not configured");
-    }
+    const [s] = await getDb().select().from(settings).limit(1);
+    if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) throw new Error("Faltan credenciales de Tiendanube");
 
-    const { tiendanubeApiToken, tiendanubeStoreId } = settings;
+    const resp = await fetch(`https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products`, {
+      headers: { Authentication: `bearer ${s.tiendanubeApiToken}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) throw new Error(`Tiendanube API error: ${resp.status}`);
 
-    try {
-      const response = await fetch(
-        `https://api.tiendanube.com/v1/${tiendanubeStoreId}/products`,
-        {
-          headers: {
-            Authentication: `bearer ${tiendanubeApiToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+    const items = (await resp.json()) as TnProduct[];
+    let count = 0;
 
-      if (!response.ok) {
-        throw new Error(`Tiendanube API error: ${response.status}`);
-      }
+    for (const p of items) {
+      const price = p.price ?? 0;
+      const name = typeof p.name === "string" ? p.name : (p.name?.es ?? "Sin nombre");
+      const tid = String(p.id);
 
-      const products = (await response.json()) as TiendanubeProduct[];
-      const importedIds: string[] = [];
+      const existing = await getDb().select().from(products).where(eq(products.tiendanubeId, tid)).limit(1);
 
-      for (const product of products) {
-        const priceList = product.price ?? 0;
-        const priceCash30 = priceList * 0.7;
-        const priceTransfer25 = priceList * 0.75;
-        const category = product.categories?.[0]?.name ?? "Sin categoria";
-        const imageUrl = product.images?.[0]?.src ?? "";
-        const stock = product.variants?.[0]?.stock ?? 0;
-        const productName =
-          typeof product.name === "string"
-            ? product.name
-            : product.name?.es ?? "Sin nombre";
-
-        await upsertProductByTiendanubeId(String(product.id), {
-          name: productName,
-          category,
-          priceList: priceList.toFixed(2),
-          priceCash30: priceCash30.toFixed(2),
-          priceTransfer25: priceTransfer25.toFixed(2),
-          stock,
-          imageUrl,
-          tiendanubeId: String(product.id),
-          active: true,
-        });
-
-        importedIds.push(String(product.id));
-      }
-
-      return {
-        success: true,
-        imported: importedIds.length,
-        ids: importedIds,
+      const data = {
+        name,
+        category: p.categories?.[0]?.name ?? "Sin categoria",
+        priceList: price.toFixed(2),
+        priceCash30: (price * 0.7).toFixed(2),
+        priceTransfer25: (price * 0.75).toFixed(2),
+        stock: p.variants?.[0]?.stock ?? 0,
+        imageUrl: p.images?.[0]?.src ?? null,
+        tiendanubeId: tid,
+        active: true,
       };
-    } catch (error) {
-      throw new Error(
-        `Failed to sync with Tiendanube: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
+
+      if (existing[0]) {
+        await getDb().update(products).set(data).where(eq(products.id, existing[0].id));
+      } else {
+        await getDb().insert(products).values(data);
+      }
+      count++;
     }
+    return { imported: count };
   }),
 
-  // Test connection to Tiendanube
   test: adminQuery.mutation(async () => {
-    const settings = await getSettings();
-    if (!settings?.tiendanubeApiToken || !settings?.tiendanubeStoreId) {
-      throw new Error("Tiendanube credentials not configured");
-    }
-
+    const [s] = await getDb().select().from(settings).limit(1);
+    if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) return { ok: false };
     try {
-      const response = await fetch(
-        `https://api.tiendanube.com/v1/${settings.tiendanubeStoreId}/products?limit=1`,
-        {
-          headers: {
-            Authentication: `bearer ${settings.tiendanubeApiToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      return {
-        success: response.ok,
-        status: response.status,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        status: 0,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
+      const resp = await fetch(`https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?limit=1`, {
+        headers: { Authentication: `bearer ${s.tiendanubeApiToken}` },
+      });
+      return { ok: resp.ok };
+    } catch { return { ok: false }; }
   }),
 });
