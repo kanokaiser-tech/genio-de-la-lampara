@@ -1,157 +1,137 @@
 import { createRouter, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { settings, products } from "@db/schema";
-import { eq } from "drizzle-orm";
-
-interface TnCategory {
-  name?: { es?: string; en?: string; pt?: string } | string;
-}
-
-interface TnImage {
-  src?: string;
-}
-
-interface TnVariant {
-  stock?: number;
-}
+import { eq, sql } from "drizzle-orm";
 
 interface TnProduct {
   id: number;
-  name?: { es?: string; en?: string; pt?: string } | string;
-  variants?: TnVariant[];
-  price?: number;
-  categories?: TnCategory[];
-  images?: TnImage[];
+  name: Record<string, string> | string;
+  handle?: Record<string, string> | string;
+  variants?: Array<{ price?: number | string }>;
+  categories?: Array<{ name: Record<string, string> | string }>;
+  images?: Array<{ src?: string }>;
+  published?: boolean;
 }
 
-function extractName(name: { es?: string; en?: string; pt?: string } | string | undefined): string {
-  if (!name) return "Sin nombre";
-  if (typeof name === "string") return name;
-  return name.es ?? name.en ?? name.pt ?? "Sin nombre";
-}
-
-function extractCategoryName(categories: TnCategory[] | undefined): string {
-  if (!categories || categories.length === 0) return "Sin categoria";
-  const cat = categories[0];
-  if (!cat.name) return "Sin categoria";
-  if (typeof cat.name === "string") return cat.name;
-  return cat.name.es ?? cat.name.en ?? cat.name.pt ?? "Sin categoria";
+function getTranslation(val: Record<string, string> | string | undefined): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  return val["es"] ?? val["en"] ?? val["pt"] ?? Object.values(val)[0] ?? "";
 }
 
 export const tiendanubeRouter = createRouter({
   sync: adminQuery.mutation(async () => {
     const [s] = await getDb().select().from(settings).limit(1);
     if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) {
-      throw new Error("Faltan credenciales de Tiendanube. Configuralas en la pestana Config.");
+      throw new Error("Faltan credenciales de Tiendanube.");
     }
 
-    // Fetch page 1 to get total count
-    const page1Resp = await fetchWithTimeout(
-      `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?per_page=200&page=1`,
-      {
-        headers: {
-          Authentication: `bearer ${s.tiendanubeApiToken}`,
-          "User-Agent": "GenioResellerApp/1.0",
-        },
-      },
-      15000
-    );
+    // Ensure slug column exists
+    try {
+      await getDb().execute(sql`ALTER TABLE products ADD COLUMN slug VARCHAR(500) UNIQUE`);
+    } catch { /* column may already exist */ }
 
-    if (!page1Resp.ok) {
-      const errBody = await page1Resp.text().catch(() => "");
-      throw new Error(`Tiendanube API error ${page1Resp.status}: ${errBody.substring(0, 200)}`);
-    }
+    // Remove old tiendanubeId-based products that don't have a slug
+    try {
+      await getDb().execute(sql`DELETE FROM products WHERE slug IS NULL OR slug = ''`);
+    } catch { /* ignore */ }
 
-    const page1Items = (await page1Resp.json()) as TnProduct[];
-    const totalCount = extractTotalCount(page1Resp, page1Items.length);
-    const allItems: TnProduct[] = [...page1Items];
+    const storeId = s.tiendanubeStoreId;
+    const apiToken = s.tiendanubeApiToken;
 
-    // Fetch remaining pages in parallel
-    const totalPages = Math.ceil(totalCount / 200);
-    if (totalPages > 1) {
-      const pagePromises: Promise<TnProduct[]>[] = [];
-      for (let p = 2; p <= totalPages; p++) {
-        pagePromises.push(
-          fetchPage(s.tiendanubeStoreId!, s.tiendanubeApiToken!, p)
-        );
+    // === ETAPA 1: Traer todos los productos paginados ===
+    let page = 1;
+    let hasMore = true;
+    const allProducts: TnProduct[] = [];
+
+    while (hasMore) {
+      const resp = await fetch(
+        `https://api.tiendanube.com/v1/${storeId}/products?per_page=200&page=${page}`,
+        {
+          headers: {
+            Authentication: `bearer ${apiToken}`,
+            "User-Agent": "Portal-Revendedores/1.0",
+          },
+        }
+      );
+
+      if (!resp.ok) {
+        const err = await resp.text().catch(() => "");
+        throw new Error(`Tiendanube API error ${resp.status}: ${err.substring(0, 200)}`);
       }
-      const results = await Promise.allSettled(pagePromises);
-      for (const r of results) {
-        if (r.status === "fulfilled") allItems.push(...r.value);
-      }
+
+      const batch = (await resp.json()) as TnProduct[];
+      allProducts.push(...batch);
+      page++;
+      if (batch.length < 200) hasMore = false;
     }
 
-    if (allItems.length === 0) {
+    if (allProducts.length === 0) {
       return { imported: 0, deleted: 0 };
     }
 
-    // Build maps for efficient upsert
-    const allTiendanubeIds: string[] = [];
-    const upserts: {
-      name: string; category: string; priceList: string; priceCash30: string;
-      priceTransfer25: string; stock: number; imageUrl: string | null;
-      tiendanubeId: string; active: boolean;
-    }[] = [];
+    // === ETAPA 2: Upsert cada producto ===
+    const seenSlugs: string[] = [];
+    let imported = 0;
 
-    for (const p of allItems) {
-      const name = extractName(p.name);
-      const category = extractCategoryName(p.categories);
-      const price = Number(p.price) || 0;
-      const stock = p.variants?.[0]?.stock ?? 0;
-      const imageUrl = p.images?.[0]?.src ?? null;
-      const tid = String(p.id);
+    for (const tnProduct of allProducts) {
+      const name = getTranslation(tnProduct.name);
+      const slug = getTranslation(tnProduct.handle);
+      const category = getTranslation(tnProduct.categories?.[0]?.name);
+      const variantPrice = parseFloat(String(tnProduct.variants?.[0]?.price ?? 0));
+      const originalPrice = isNaN(variantPrice) ? 0 : variantPrice;
+      const priceCash30 = Math.round(originalPrice * 0.7 * 100) / 100;
+      const priceTransfer25 = Math.round(originalPrice * 0.75 * 100) / 100;
+      const inStock = tnProduct.published ?? true;
+      const imageUrl = tnProduct.images?.[0]?.src ?? null;
 
-      allTiendanubeIds.push(tid);
-      upserts.push({
-        name,
-        category,
-        priceList: price.toFixed(2),
-        priceCash30: (price * 0.7).toFixed(2),
-        priceTransfer25: (price * 0.75).toFixed(2),
-        stock,
-        imageUrl,
-        tiendanubeId: tid,
-        active: true,
-      });
+      if (!slug) continue;
+      seenSlugs.push(slug);
+
+      await getDb().execute(sql`
+        INSERT INTO products (name, priceList, priceCash30, priceTransfer25, category, stock, imageUrl, slug, tiendanubeId, active)
+        VALUES (${name}, ${originalPrice.toFixed(2)}, ${priceCash30.toFixed(2)}, ${priceTransfer25.toFixed(2)}, ${category}, ${inStock ? 1 : 0}, ${imageUrl}, ${slug}, ${String(tnProduct.id)}, TRUE)
+        ON DUPLICATE KEY UPDATE
+          name = VALUES(name),
+          priceList = VALUES(priceList),
+          priceCash30 = VALUES(priceCash30),
+          priceTransfer25 = VALUES(priceTransfer25),
+          category = VALUES(category),
+          stock = VALUES(stock),
+          imageUrl = VALUES(imageUrl),
+          tiendanubeId = VALUES(tiendanubeId),
+          active = TRUE
+      `);
+      imported++;
     }
 
-    // Batch upsert using INSERT ... ON DUPLICATE KEY UPDATE
-    const db = getDb();
-    const batchSize = 50;
-    for (let i = 0; i < upserts.length; i += batchSize) {
-      const batch = upserts.slice(i, i + batchSize);
-      for (const item of batch) {
-        const existing = await db.select().from(products).where(eq(products.tiendanubeId, item.tiendanubeId)).limit(1);
-        if (existing[0]) {
-          await db.update(products).set(item).where(eq(products.id, existing[0].id));
-        } else {
-          await db.insert(products).values(item);
-        }
-      }
+    // === ETAPA 3: Eliminar los que ya no estan en Tiendanube ===
+    let deleted = 0;
+    if (seenSlugs.length > 0) {
+      // Build IN clause
+      const placeholders = seenSlugs.map(() => "?").join(",");
+      const result = await getDb().execute(sql.raw(
+        `DELETE FROM products WHERE slug IS NOT NULL AND slug NOT IN (${placeholders})`,
+        ...seenSlugs
+      ));
+      deleted = Number((result as any)?.[0]?.affectedRows ?? 0);
     }
 
-    // Delete products not in Tiendanube
-    let deletedCount = 0;
-    const dbProds = await db.select({ tiendanubeId: products.tiendanubeId, id: products.id }).from(products).where(eq(products.active, true));
-    const tnIdsSet = new Set(allTiendanubeIds);
-    for (const dp of dbProds) {
-      if (dp.tiendanubeId && !tnIdsSet.has(dp.tiendanubeId)) {
-        await db.delete(products).where(eq(products.id, dp.id));
-        deletedCount++;
-      }
-    }
-
-    return { imported: upserts.length, deleted: deletedCount };
+    return { imported, deleted };
   }),
 
   test: adminQuery.mutation(async () => {
     const [s] = await getDb().select().from(settings).limit(1);
     if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) return { ok: false };
     try {
-      const resp = await fetchWithTimeout(
+      const resp = await fetch(
         `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?per_page=1`,
-        { headers: { Authentication: `bearer ${s.tiendanubeApiToken}`, "User-Agent": "GenioResellerApp/1.0" } },
-        10000
+        {
+          headers: {
+            Authentication: `bearer ${s.tiendanubeApiToken}`,
+            "User-Agent": "Portal-Revendedores/1.0",
+          },
+        }
       );
       return { ok: resp.ok };
     } catch {
@@ -159,44 +139,3 @@ export const tiendanubeRouter = createRouter({
     }
   }),
 });
-
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const resp = await fetch(url, { ...init, signal: controller.signal });
-    clearTimeout(timeout);
-    return resp;
-  } catch (e) {
-    clearTimeout(timeout);
-    throw e;
-  }
-}
-
-async function fetchPage(storeId: string, token: string, page: number): Promise<TnProduct[]> {
-  try {
-    const resp = await fetchWithTimeout(
-      `https://api.tiendanube.com/v1/${storeId}/products?per_page=200&page=${page}`,
-      {
-        headers: {
-          Authentication: `bearer ${token}`,
-          "User-Agent": "GenioResellerApp/1.0",
-        },
-      },
-      15000
-    );
-    if (!resp.ok) return [];
-    const ct = resp.headers.get("content-type") ?? "";
-    if (!ct.includes("application/json")) return [];
-    return (await resp.json()) as TnProduct[];
-  } catch {
-    return [];
-  }
-}
-
-function extractTotalCount(resp: Response, fallback: number): number {
-  // Tiendanube returns total count in X-Total-Count header
-  const totalHeader = resp.headers.get("X-Total-Count");
-  if (totalHeader) return parseInt(totalHeader, 10);
-  return fallback;
-}

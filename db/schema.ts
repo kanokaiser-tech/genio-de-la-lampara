@@ -37,6 +37,7 @@ export const products = mysqlTable("products", {
   stock: int("stock").default(0).notNull(),
   imageUrl: text("imageUrl"),
   tiendanubeId: varchar("tiendanubeId", { length: 100 }),
+  slug: varchar("slug", { length: 500 }).unique(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
