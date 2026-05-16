@@ -12,31 +12,30 @@ import {
 } from "drizzle-orm/mysql-core";
 
 // ============================================================
-// Local Users - email/password authentication
+// Users - Kimi OAuth authentication with 3 roles
 // ============================================================
-export const localUsers = mysqlTable("localUsers", {
+export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 320 }).notNull().unique(),
-  password: varchar("password", { length: 255 }).notNull(),
-  unionId: varchar("unionId", { length: 255 }),
+  unionId: varchar("unionId", { length: 255 }).notNull().unique(),
+  name: varchar("name", { length: 255 }),
+  email: varchar("email", { length: 320 }),
   avatar: text("avatar"),
   phone: varchar("phone", { length: 50 }),
-  role: mysqlEnum("role", ["superadmin", "admin", "revendedor"])
-    .default("revendedor")
+  role: mysqlEnum("role", ["superadmin", "admin", "revendedor", "user"])
+    .default("user")
     .notNull(),
   parentId: bigint("parentId", { mode: "number", unsigned: true }),
   discountType: mysqlEnum("discountType", ["efectivo", "transferencia"]).default("efectivo"),
-  lastSignInAt: timestamp("lastSignInAt").defaultNow(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date()),
+  lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
 });
 
-export type LocalUser = typeof localUsers.$inferSelect;
-export type InsertLocalUser = typeof localUsers.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
 
 // ============================================================
 // Products - imported from Tiendanube or created manually

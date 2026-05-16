@@ -11,7 +11,7 @@ import {
   createOrderItems,
 } from "./queries/orders";
 import { getCartWithProducts, clearCart } from "./queries/cart";
-import { findUserById } from "./queries/localUsers";
+import { findUserById } from "./queries/users";
 import { getSettings } from "./queries/settings";
 
 export const orderRouter = createRouter({

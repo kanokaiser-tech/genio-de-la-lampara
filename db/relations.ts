@@ -1,13 +1,13 @@
 import { relations } from "drizzle-orm";
-import { localUsers, products, orders, orderItems, cartItems } from "./schema";
+import { users, products, orders, orderItems, cartItems } from "./schema";
 
-export const localUsersRelations = relations(localUsers, ({ one, many }) => ({
-  admin: one(localUsers, {
-    fields: [localUsers.parentId],
-    references: [localUsers.id],
+export const usersRelations = relations(users, ({ one, many }) => ({
+  admin: one(users, {
+    fields: [users.parentId],
+    references: [users.id],
     relationName: "adminRelation",
   }),
-  revendedores: many(localUsers, {
+  revendedores: many(users, {
     relationName: "adminRelation",
   }),
   orders: many(orders),
@@ -20,13 +20,13 @@ export const productsRelations = relations(products, ({ many }) => ({
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
-  user: one(localUsers, {
+  user: one(users, {
     fields: [orders.userId],
-    references: [localUsers.id],
+    references: [users.id],
   }),
-  admin: one(localUsers, {
+  admin: one(users, {
     fields: [orders.adminId],
-    references: [localUsers.id],
+    references: [users.id],
   }),
   items: many(orderItems),
 }));
@@ -43,9 +43,9 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
 }));
 
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
-  user: one(localUsers, {
+  user: one(users, {
     fields: [cartItems.userId],
-    references: [localUsers.id],
+    references: [users.id],
   }),
   product: one(products, {
     fields: [cartItems.productId],

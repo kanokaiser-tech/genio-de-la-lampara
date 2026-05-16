@@ -1,3 +1,5 @@
+export const LOGIN_PATH = "/login";
+
 export const ROLES = {
   SUPERADMIN: "superadmin" as const,
   ADMIN: "admin" as const,

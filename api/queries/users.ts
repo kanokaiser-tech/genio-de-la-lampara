@@ -1,14 +1,14 @@
-// Legacy file - kept for compatibility with kimi/auth.ts
-// All new code should use localUsers.ts instead
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import * as schema from "@db/schema";
+import type { InsertUser } from "@db/schema";
 import { getDb } from "./connection";
+import { env } from "../lib/env";
 
 export async function findUserByUnionId(unionId: string) {
   const rows = await getDb()
     .select()
-    .from(schema.localUsers)
-    .where(eq(schema.localUsers.unionId, unionId))
+    .from(schema.users)
+    .where(eq(schema.users.unionId, unionId))
     .limit(1);
   return rows.at(0);
 }
@@ -16,50 +16,88 @@ export async function findUserByUnionId(unionId: string) {
 export async function findUserById(id: number) {
   const rows = await getDb()
     .select()
-    .from(schema.localUsers)
-    .where(eq(schema.localUsers.id, id))
+    .from(schema.users)
+    .where(eq(schema.users.id, id))
+    .limit(1);
+  return rows.at(0);
+}
+
+export async function findUserByEmail(email: string) {
+  const rows = await getDb()
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.email, email))
     .limit(1);
   return rows.at(0);
 }
 
 export async function getAllUsers() {
-  return getDb().select().from(schema.localUsers);
+  return getDb().select().from(schema.users);
 }
 
-export async function upsertUser(data: {
-  unionId: string;
-  name?: string;
-  email?: string;
-  avatar?: string;
-  lastSignInAt?: Date;
-}) {
-  const existing = await findUserByUnionId(data.unionId);
-  
-  if (existing) {
-    // Update
-    await getDb()
-      .update(schema.localUsers)
-      .set({
-        name: data.name ?? existing.name,
-        lastSignInAt: data.lastSignInAt ?? new Date(),
-        ...(data.avatar ? { avatar: data.avatar } : {}),
-      })
-      .where(eq(schema.localUsers.id, existing.id));
-    return existing.id;
-  } else {
-    // Insert with placeholder values for required fields
-    const result = await getDb().insert(schema.localUsers).values({
-      unionId: data.unionId,
-      name: data.name ?? "OAuth User",
-      email: data.email ?? `${data.unionId}@oauth.local`,
-      password: "oauth-not-used",
-      avatar: data.avatar ?? null,
-      lastSignInAt: data.lastSignInAt ?? new Date(),
-      role: "revendedor",
-      discountType: "efectivo",
-      parentId: null,
-      phone: null,
-    }).$returningId();
-    return result[0]?.id;
+export async function getUsersByRole(role: "superadmin" | "admin" | "revendedor" | "user") {
+  return getDb()
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.role, role));
+}
+
+export async function getRevendedoresByAdminId(adminId: number) {
+  return getDb()
+    .select()
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.role, "revendedor"),
+        eq(schema.users.parentId, adminId)
+      )
+    );
+}
+
+export async function getAdmins() {
+  return getDb()
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.role, "admin"));
+}
+
+export async function upsertUser(data: InsertUser) {
+  const values = { ...data };
+  const updateSet: Partial<InsertUser> = {
+    lastSignInAt: new Date(),
+    ...data,
+  };
+
+  // First login (app creator) becomes superadmin
+  if (
+    values.role === undefined &&
+    values.unionId &&
+    values.unionId === env.ownerUnionId
+  ) {
+    values.role = "superadmin";
+    updateSet.role = "superadmin";
   }
+
+  await getDb()
+    .insert(schema.users)
+    .values(values)
+    .onDuplicateKeyUpdate({ set: updateSet });
+}
+
+export async function createUser(data: InsertUser) {
+  const result = await getDb().insert(schema.users).values(data).$returningId();
+  return result[0]?.id;
+}
+
+export async function updateUser(id: number, data: Partial<InsertUser>) {
+  await getDb()
+    .update(schema.users)
+    .set(data)
+    .where(eq(schema.users.id, id));
+}
+
+export async function deleteUser(id: number) {
+  await getDb()
+    .delete(schema.users)
+    .where(eq(schema.users.id, id));
 }

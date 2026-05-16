@@ -1,53 +1,24 @@
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { trpc } from "@/providers/trpc";
-import { Lamp, Loader2 } from "lucide-react";
+import { Lamp } from "lucide-react";
+
+function getOAuthUrl() {
+  const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
+  const appID = import.meta.env.VITE_APP_ID;
+  const redirectUri = `${window.location.origin}/api/oauth/callback`;
+  const state = btoa(redirectUri);
+
+  const url = new URL(`${kimiAuthUrl}/api/oauth/authorize`);
+  url.searchParams.set("client_id", appID);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "profile");
+  url.searchParams.set("state", state);
+
+  return url.toString();
+}
 
 export default function Login() {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [error, setError] = useState("");
-
-  const { data: canReg } = trpc.auth.canRegister.useQuery();
-
-  const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: (data) => {
-      localStorage.setItem("auth_token", data.token);
-      window.location.href = "/";
-    },
-    onError: (err) => setError(err.message),
-  });
-
-  const registerMutation = trpc.auth.register.useMutation({
-    onSuccess: (data) => {
-      localStorage.setItem("auth_token", data.token);
-      window.location.href = "/";
-    },
-    onError: (err) => setError(err.message),
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
-    if (mode === "login") {
-      loginMutation.mutate({ email, password });
-    } else {
-      if (!name.trim()) {
-        setError("Nombre es requerido");
-        return;
-      }
-      registerMutation.mutate({ name, email, password, phone: phone || undefined });
-    }
-  };
-
-  const isLoading = loginMutation.isPending || registerMutation.isPending;
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
       <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800">
@@ -57,89 +28,27 @@ export default function Login() {
               <Lamp className="w-8 h-8 text-yellow-500" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-white">
-            {mode === "login" ? "Ingresar" : "Crear cuenta"}
-          </CardTitle>
+          <CardTitle className="text-2xl text-white">Portal de Revendedores</CardTitle>
           <p className="text-zinc-400 text-sm">
-            {mode === "login"
-              ? "Accede con tu email y contrasena"
-              : "Crea la cuenta de superadmin"}
+            Accede a tus precios especiales con descuentos exclusivos
           </p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {mode === "register" && (
-              <Input
-                placeholder="Nombre completo"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-white"
-                required
-              />
-            )}
-            <Input
-              placeholder="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-white"
-              required
-            />
-            <Input
-              placeholder="Contrasena"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-white"
-              required
-              minLength={4}
-            />
-            {mode === "register" && (
-              <Input
-                placeholder="Telefono (opcional)"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-white"
-              />
-            )}
-
-            {error && (
-              <p className="text-red-400 text-sm">{error}</p>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-5"
-              size="lg"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : mode === "login" ? (
-                "Ingresar"
-              ) : (
-                "Crear cuenta"
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-4 text-center">
-            {canReg?.canRegister && mode === "login" ? (
-              <button
-                onClick={() => { setMode("register"); setError(""); }}
-                className="text-sm text-yellow-500 hover:text-yellow-400"
-              >
-                No hay usuarios. Crear cuenta de superadmin
-              </button>
-            ) : mode === "register" ? (
-              <button
-                onClick={() => { setMode("login"); setError(""); }}
-                className="text-sm text-zinc-400 hover:text-white"
-              >
-                Ya tengo cuenta
-              </button>
-            ) : null}
-          </div>
+          <Button
+            className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-5"
+            size="lg"
+            onClick={() => {
+              window.location.href = getOAuthUrl();
+            }}
+          >
+            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+            </svg>
+            Ingresar con Kimi
+          </Button>
+          <p className="text-zinc-500 text-xs text-center mt-4">
+            Tu cuenta de Kimi es tu acceso al portal
+          </p>
         </CardContent>
       </Card>
     </div>

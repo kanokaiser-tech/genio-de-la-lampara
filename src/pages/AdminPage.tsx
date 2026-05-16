@@ -40,7 +40,7 @@ export default function AdminPage() {
     email: "",
     phone: "",
     discountType: "efectivo" as "efectivo" | "transferencia",
-    password: "",
+    unionId: "",
   });
 
   // Settings form
@@ -75,7 +75,7 @@ export default function AdminPage() {
   const createRev = trpc.user.createRevendedor.useMutation({
     onSuccess: () => {
       utils.user.myRevendedores.invalidate();
-      setNewRevendedor({ name: "", email: "", phone: "", discountType: "efectivo", password: "" });
+      setNewRevendedor({ name: "", email: "", phone: "", discountType: "efectivo", unionId: "" });
     },
   });
   const deleteRev = trpc.user.delete.useMutation({
@@ -291,10 +291,9 @@ export default function AdminPage() {
                 className="bg-zinc-800 border-zinc-700"
               />
               <Input
-                placeholder="Contrasena"
-                type="password"
-                value={newRevendedor.password}
-                onChange={(e) => setNewRevendedor({ ...newRevendedor, password: e.target.value })}
+                placeholder="Union ID de Kimi"
+                value={newRevendedor.unionId}
+                onChange={(e) => setNewRevendedor({ ...newRevendedor, unionId: e.target.value })}
                 className="bg-zinc-800 border-zinc-700"
               />
               <select
@@ -317,10 +316,10 @@ export default function AdminPage() {
                     email: newRevendedor.email,
                     phone: newRevendedor.phone || undefined,
                     discountType: newRevendedor.discountType,
-                    password: newRevendedor.password,
+                    unionId: newRevendedor.unionId,
                   })
                 }
-                disabled={createRev.isPending || !newRevendedor.name || !newRevendedor.email || !newRevendedor.password}
+                disabled={createRev.isPending || !newRevendedor.name || !newRevendedor.email || !newRevendedor.unionId}
                 className="bg-yellow-500 hover:bg-yellow-600 text-black"
               >
                 <Plus className="w-4 h-4 mr-2" />

@@ -9,9 +9,7 @@ import {
   updateUser,
   deleteUser,
   findUserById,
-  findUserByEmail,
-} from "./queries/localUsers";
-import { hashPassword } from "./localAuth";
+} from "./queries/users";
 
 export const userRouter = createRouter({
   // List all users - superadmin only
@@ -21,7 +19,7 @@ export const userRouter = createRouter({
 
   // List users by role - admin/superadmin
   byRole: adminQuery
-    .input(z.object({ role: z.enum(["admin", "revendedor", "superadmin"]) }))
+    .input(z.object({ role: z.enum(["admin", "revendedor", "superadmin", "user"]) }))
     .query(async ({ input }) => {
       return getUsersByRole(input.role);
     }),
@@ -43,23 +41,17 @@ export const userRouter = createRouter({
         name: z.string().min(1),
         email: z.string().email(),
         phone: z.string().optional(),
-        password: z.string().min(4),
+        unionId: z.string().min(1),
         discountType: z.enum(["efectivo", "transferencia"]).default("efectivo"),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const existing = await findUserByEmail(input.email);
-      if (existing) throw new Error("Este email ya esta registrado");
-
-      const hashed = await hashPassword(input.password);
       const id = await createUser({
-        name: input.name,
-        email: input.email,
-        password: hashed,
-        phone: input.phone ?? null,
+        ...input,
         role: "revendedor",
         parentId: ctx.user.id,
-        discountType: input.discountType,
+        avatar: null,
+        lastSignInAt: new Date(),
       });
       return { id };
     }),
@@ -71,27 +63,22 @@ export const userRouter = createRouter({
         name: z.string().min(1),
         email: z.string().email(),
         phone: z.string().optional(),
-        password: z.string().min(4),
+        unionId: z.string().min(1),
       })
     )
     .mutation(async ({ input }) => {
-      const existing = await findUserByEmail(input.email);
-      if (existing) throw new Error("Este email ya esta registrado");
-
-      const hashed = await hashPassword(input.password);
       const id = await createUser({
-        name: input.name,
-        email: input.email,
-        password: hashed,
-        phone: input.phone ?? null,
+        ...input,
         role: "admin",
         discountType: "efectivo",
         parentId: null,
+        avatar: null,
+        lastSignInAt: new Date(),
       });
       return { id };
     }),
 
-  // Update a user
+  // Update a user (change role, discount, assign admin)
   update: adminQuery
     .input(
       z.object({
@@ -99,8 +86,9 @@ export const userRouter = createRouter({
         name: z.string().optional(),
         email: z.string().email().optional(),
         phone: z.string().optional(),
+        role: z.enum(["superadmin", "admin", "revendedor", "user"]).optional(),
         discountType: z.enum(["efectivo", "transferencia"]).optional(),
-        parentId: z.number().optional(),
+        parentId: z.number().nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {

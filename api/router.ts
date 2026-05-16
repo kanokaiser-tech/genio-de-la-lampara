@@ -1,4 +1,4 @@
-import { localAuthRouter } from "./localAuthRouter";
+import { authRouter } from "./auth-router";
 import { userRouter } from "./userRouter";
 import { productRouter } from "./productRouter";
 import { orderRouter } from "./orderRouter";
@@ -9,7 +9,7 @@ import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
-  auth: localAuthRouter,
+  auth: authRouter,
   user: userRouter,
   product: productRouter,
   order: orderRouter,
