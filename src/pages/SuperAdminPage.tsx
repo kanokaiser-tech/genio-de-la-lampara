@@ -17,7 +17,7 @@ export default function SuperAdminPage() {
     name: "",
     email: "",
     phone: "",
-    unionId: "",
+    password: "",
   });
 
   const { data: allUsers, isLoading } = trpc.user.list.useQuery();
@@ -31,7 +31,7 @@ export default function SuperAdminPage() {
     onSuccess: () => {
       utils.user.list.invalidate();
       utils.user.listAdmins.invalidate();
-      setNewAdmin({ name: "", email: "", phone: "", unionId: "" });
+      setNewAdmin({ name: "", email: "", phone: "", password: "" });
     },
   });
   const deleteUser = trpc.user.delete.useMutation({
@@ -92,9 +92,10 @@ export default function SuperAdminPage() {
             className="bg-zinc-800 border-zinc-700"
           />
           <Input
-            placeholder="Union ID"
-            value={newAdmin.unionId}
-            onChange={(e) => setNewAdmin({ ...newAdmin, unionId: e.target.value })}
+            placeholder="Contrasena"
+            type="password"
+            value={newAdmin.password}
+            onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
             className="bg-zinc-800 border-zinc-700"
           />
           <Button
@@ -103,10 +104,10 @@ export default function SuperAdminPage() {
                 name: newAdmin.name,
                 email: newAdmin.email,
                 phone: newAdmin.phone || undefined,
-                unionId: newAdmin.unionId,
+                password: newAdmin.password,
               })
             }
-            disabled={createAdmin.isPending || !newAdmin.name || !newAdmin.email || !newAdmin.unionId}
+            disabled={createAdmin.isPending || !newAdmin.name || !newAdmin.email || !newAdmin.password}
             className="bg-yellow-500 hover:bg-yellow-600 text-black"
           >
             <Plus className="w-4 h-4 mr-2" />

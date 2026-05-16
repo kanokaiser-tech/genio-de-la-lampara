@@ -1,20 +1,7 @@
-export const LOGIN_PATH = "/login";
-
 export const ROLES = {
   SUPERADMIN: "superadmin" as const,
   ADMIN: "admin" as const,
   REVENDEDOR: "revendedor" as const,
-};
-
-export const ORDER_STATUS = {
-  PENDING: "pending" as const,
-  APPROVED: "approved" as const,
-  REJECTED: "rejected" as const,
-};
-
-export const PAYMENT_TYPES = {
-  EFECTIVO: "efectivo" as const,
-  TRANSFERENCIA: "transferencia" as const,
 };
 
 export function formatPrice(price: number | string): string {

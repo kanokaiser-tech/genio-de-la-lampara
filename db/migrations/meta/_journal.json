@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1778901780804,
+      "tag": "0000_hard_albert_cleary",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778901833312,
+      "tag": "0001_bitter_changeling",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778901874602,
+      "tag": "0002_even_sue_storm",
+      "breakpoints": true
+    }
+  ]
+}

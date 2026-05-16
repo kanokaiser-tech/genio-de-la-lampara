@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation, useNavigate } from "react-router";
+import { Outlet, Link, useLocation } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLES } from "@/const";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import { useState } from "react";
 export default function Layout() {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isLoginPage = location.pathname === "/login";
@@ -93,13 +92,14 @@ export default function Layout() {
                   </div>
                 </>
               ) : (
-                <Button
-                  onClick={() => navigate("/login")}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold"
-                  size="sm"
-                >
-                  Ingresar
-                </Button>
+                <Link to="/login">
+                  <Button
+                    className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold"
+                    size="sm"
+                  >
+                    Ingresar
+                  </Button>
+                </Link>
               )}
             </div>
           </nav>
@@ -118,13 +118,14 @@ export default function Layout() {
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             ) : (
-              <Button
-                onClick={() => navigate("/login")}
-                className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold text-xs"
-                size="sm"
-              >
-                Ingresar
-              </Button>
+              <Link to="/login">
+                <Button
+                  className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold text-xs"
+                  size="sm"
+                >
+                  Ingresar
+                </Button>
+              </Link>
             )}
           </nav>
 

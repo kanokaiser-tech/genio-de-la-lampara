@@ -12,13 +12,14 @@ import {
 } from "drizzle-orm/mysql-core";
 
 // ============================================================
-// Users - extended with roles: superadmin, admin, revendedor
+// Local Users - email/password authentication
 // ============================================================
-export const users = mysqlTable("users", {
+export const localUsers = mysqlTable("localUsers", {
   id: serial("id").primaryKey(),
-  unionId: varchar("unionId", { length: 255 }).notNull().unique(),
-  name: varchar("name", { length: 255 }),
-  email: varchar("email", { length: 320 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
+  unionId: varchar("unionId", { length: 255 }),
   avatar: text("avatar"),
   phone: varchar("phone", { length: 50 }),
   role: mysqlEnum("role", ["superadmin", "admin", "revendedor"])
@@ -26,16 +27,16 @@ export const users = mysqlTable("users", {
     .notNull(),
   parentId: bigint("parentId", { mode: "number", unsigned: true }),
   discountType: mysqlEnum("discountType", ["efectivo", "transferencia"]).default("efectivo"),
+  lastSignInAt: timestamp("lastSignInAt").defaultNow(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date()),
-  lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
 });
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
+export type LocalUser = typeof localUsers.$inferSelect;
+export type InsertLocalUser = typeof localUsers.$inferInsert;
 
 // ============================================================
 // Products - imported from Tiendanube or created manually
@@ -120,7 +121,7 @@ export type CartItem = typeof cartItems.$inferSelect;
 export type InsertCartItem = typeof cartItems.$inferInsert;
 
 // ============================================================
-// Settings - configuración global de la tienda
+// Settings - configuracion global de la tienda
 // ============================================================
 export const settings = mysqlTable("settings", {
   id: serial("id").primaryKey(),

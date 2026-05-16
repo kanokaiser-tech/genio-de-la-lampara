@@ -9,7 +9,9 @@ import {
   updateUser,
   deleteUser,
   findUserById,
-} from "./queries/users";
+  findUserByEmail,
+} from "./queries/localUsers";
+import { hashPassword } from "./localAuth";
 
 export const userRouter = createRouter({
   // List all users - superadmin only
@@ -41,15 +43,23 @@ export const userRouter = createRouter({
         name: z.string().min(1),
         email: z.string().email(),
         phone: z.string().optional(),
+        password: z.string().min(4),
         discountType: z.enum(["efectivo", "transferencia"]).default("efectivo"),
-        unionId: z.string().min(1),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const existing = await findUserByEmail(input.email);
+      if (existing) throw new Error("Este email ya esta registrado");
+
+      const hashed = await hashPassword(input.password);
       const id = await createUser({
-        ...input,
+        name: input.name,
+        email: input.email,
+        password: hashed,
+        phone: input.phone ?? null,
         role: "revendedor",
         parentId: ctx.user.id,
+        discountType: input.discountType,
       });
       return { id };
     }),
@@ -61,14 +71,22 @@ export const userRouter = createRouter({
         name: z.string().min(1),
         email: z.string().email(),
         phone: z.string().optional(),
-        unionId: z.string().min(1),
+        password: z.string().min(4),
       })
     )
     .mutation(async ({ input }) => {
+      const existing = await findUserByEmail(input.email);
+      if (existing) throw new Error("Este email ya esta registrado");
+
+      const hashed = await hashPassword(input.password);
       const id = await createUser({
-        ...input,
+        name: input.name,
+        email: input.email,
+        password: hashed,
+        phone: input.phone ?? null,
         role: "admin",
         discountType: "efectivo",
+        parentId: null,
       });
       return { id };
     }),

@@ -35,7 +35,6 @@ function ProtectedRoute({
   }
 
   if (allowedRoles && !allowedRoles.includes(user?.role ?? "")) {
-    // Redirect based on role
     if (user?.role === ROLES.REVENDEDOR) return <Navigate to="/productos" replace />;
     if (user?.role === ROLES.ADMIN) return <Navigate to="/admin" replace />;
     if (user?.role === ROLES.SUPERADMIN) return <Navigate to="/superadmin" replace />;
