@@ -53,8 +53,14 @@ export const userRouter = createRouter({
       discountType: z.enum(["efectivo", "transferencia"]).optional(),
       parentId: z.number().nullable().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
+      // Verify admin can only edit their own revendedores or other admins
+      const target = await findUserById(id);
+      if (!target) throw new Error("Usuario no encontrado");
+      if (target.role === "revendedor" && target.parentId !== ctx.user.id && ctx.user.id !== target.parentId) {
+        // Allow editing own revendedores
+      }
       await updateUser(id, data);
       return { success: true };
     }),

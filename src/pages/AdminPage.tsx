@@ -5,24 +5,34 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, CheckCircle, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check } from "lucide-react";
 
 export default function AdminPage() {
   const utils = trpc.useUtils();
   const [tab, setTab] = useState("products");
   const [expanded, setExpanded] = useState<number | null>(null);
+
+  // New forms
   const [newProd, setNewProd] = useState({ name: "", category: "", priceList: "", stock: "0" });
   const [newRev, setNewRev] = useState({ name: "", email: "", phone: "", password: "", discountType: "efectivo" as "efectivo" | "transferencia" });
   const [newAdmin, setNewAdmin] = useState({ name: "", email: "", phone: "", password: "" });
+
+  // Edit form
+  const [editing, setEditing] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "" });
+
+  // Password change
   const [changePass, setChangePass] = useState<{ id: number; name: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
 
+  // Data
   const { data: products, isLoading: lp } = trpc.product.list.useQuery();
   const { data: revs, isLoading: lr } = trpc.user.myRevendedores.useQuery();
   const { data: admins } = trpc.user.listAdmins.useQuery();
   const { data: orders, isLoading: lo } = trpc.order.myOrdersAsAdmin.useQuery();
   const { data: settings } = trpc.settings.get.useQuery();
 
+  // Mutations
   const cProd = trpc.product.create.useMutation({ onSuccess: () => { utils.product.list.invalidate(); setNewProd({ name: "", category: "", priceList: "", stock: "0" }); } });
   const dProd = trpc.product.delete.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const clProd = trpc.product.clearAll.useMutation({ onSuccess: () => utils.product.list.invalidate() });
@@ -30,6 +40,7 @@ export default function AdminPage() {
   const cAdmin = trpc.user.createAdmin.useMutation({ onSuccess: () => { utils.user.listAdmins.invalidate(); setNewAdmin({ name: "", email: "", phone: "", password: "" }); } });
   const dUser = trpc.user.delete.useMutation({ onSuccess: () => { utils.user.myRevendedores.invalidate(); utils.user.listAdmins.invalidate(); } });
   const chPass = trpc.user.changePassword.useMutation({ onSuccess: () => { setChangePass(null); setNewPassword(""); } });
+  const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.myRevendedores.invalidate(); utils.user.listAdmins.invalidate(); setEditing(null); } });
   const upSet = trpc.settings.update.useMutation({ onSuccess: () => utils.settings.get.invalidate() });
   const sync = trpc.tiendanube.sync.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const test = trpc.tiendanube.test.useMutation();
@@ -37,6 +48,8 @@ export default function AdminPage() {
   const rej = trpc.order.reject.useMutation({ onSuccess: () => utils.order.myOrdersAsAdmin.invalidate() });
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "" }); };
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -51,6 +64,7 @@ export default function AdminPage() {
           <TabsTrigger value="settings" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black"><Settings className="w-4 h-4 mr-1" /> Config</TabsTrigger>
         </TabsList>
 
+        {/* PRODUCTS */}
         <TabsContent value="products" className="space-y-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <h3 className="font-semibold mb-3">Nuevo producto</h3>
@@ -79,6 +93,7 @@ export default function AdminPage() {
           )}
         </TabsContent>
 
+        {/* REVENDEDORES */}
         <TabsContent value="revendedores" className="space-y-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <h3 className="font-semibold mb-3">Nuevo revendedor</h3>
@@ -93,15 +108,30 @@ export default function AdminPage() {
               <Button onClick={() => cRev.mutate(newRev)} disabled={!newRev.name || !newRev.email || !newRev.password} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Crear</Button>
             </div>
           </div>
-          {lr ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-yellow-500 animate-spin" /></div> : (
+          {lr ? <Loader2 className="w-6 h-6 text-yellow-500 animate-spin mx-auto" /> : (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-              <div className="grid grid-cols-[1fr,200px,120px,100px,80px,80px] gap-4 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase"><span>Nombre</span><span>Email</span><span>Telefono</span><span>Descuento</span><span></span><span></span></div>
+              <div className="grid grid-cols-[1fr,200px,120px,100px,80px,80px,80px] gap-4 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase items-center"><span>Nombre</span><span>Email</span><span>Telefono</span><span>Descuento</span><span></span><span></span><span></span></div>
               {revs?.map(r => (
-                <div key={r.id} className="grid grid-cols-[1fr,200px,120px,100px,80px,80px] gap-4 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
-                  <span>{r.name}</span><span className="text-zinc-400">{r.email}</span><span className="text-zinc-400">{r.phone || "-"}</span>
-                  <Badge variant="outline" className="text-yellow-500 border-yellow-500/30 w-fit">{r.discountType === "efectivo" ? "30%" : "25%"}</Badge>
-                  <button onClick={() => setChangePass({ id: r.id, name: r.name })} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Lock className="w-4 h-4" /></button>
-                  <button onClick={() => dUser.mutate({ id: r.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                <div key={r.id} className="grid grid-cols-[1fr,200px,120px,100px,80px,80px,80px] gap-4 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
+                  {editing === r.id ? (
+                    <>
+                      <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                      <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                      <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                      <div />
+                      <Button size="sm" onClick={() => upUser.mutate({ id: r.id, ...editForm })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2"><X className="w-3 h-3" /></Button>
+                      <div />
+                    </>
+                  ) : (
+                    <>
+                      <span>{r.name}</span><span className="text-zinc-400">{r.email}</span><span className="text-zinc-400">{r.phone || "-"}</span>
+                      <Badge variant="outline" className="text-yellow-500 border-yellow-500/30 w-fit">{r.discountType === "efectivo" ? "30%" : "25%"}</Badge>
+                      <button onClick={() => startEdit(r)} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => setChangePass({ id: r.id, name: r.name })} className="text-zinc-500 hover:text-yellow-400 flex justify-center"><Lock className="w-4 h-4" /></button>
+                      <button onClick={() => dUser.mutate({ id: r.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                    </>
+                  )}
                 </div>
               ))}
               {(!revs || revs.length === 0) && <div className="text-center py-8 text-zinc-500 text-sm">No hay revendedores</div>}
@@ -119,6 +149,7 @@ export default function AdminPage() {
           )}
         </TabsContent>
 
+        {/* ADMINS */}
         <TabsContent value="admins" className="space-y-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <h3 className="font-semibold mb-3">Nuevo admin</h3>
@@ -131,18 +162,43 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            <div className="grid grid-cols-[1fr,200px,120px,80px,80px] gap-4 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase"><span>Nombre</span><span>Email</span><span>Telefono</span><span></span><span></span></div>
+            <div className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase items-center"><span>Nombre</span><span>Email</span><span>Telefono</span><span></span><span></span><span></span></div>
             {admins?.map(a => (
-              <div key={a.id} className="grid grid-cols-[1fr,200px,120px,80px,80px] gap-4 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
-                <span className="font-medium">{a.name}</span><span className="text-zinc-400">{a.email}</span><span className="text-zinc-400">{a.phone || "-"}</span>
-                <button onClick={() => setChangePass({ id: a.id, name: a.name })} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Lock className="w-4 h-4" /></button>
-                <button onClick={() => dUser.mutate({ id: a.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+              <div key={a.id} className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
+                {editing === a.id ? (
+                  <>
+                    <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                    <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                    <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                    <Button size="sm" onClick={() => upUser.mutate({ id: a.id, ...editForm })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2"><X className="w-3 h-3" /></Button>
+                    <div />
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium">{a.name}</span><span className="text-zinc-400">{a.email}</span><span className="text-zinc-400">{a.phone || "-"}</span>
+                    <button onClick={() => startEdit(a)} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => setChangePass({ id: a.id, name: a.name })} className="text-zinc-500 hover:text-yellow-400 flex justify-center"><Lock className="w-4 h-4" /></button>
+                    <button onClick={() => dUser.mutate({ id: a.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                  </>
+                )}
               </div>
             ))}
             {(!admins || admins.length === 0) && <div className="text-center py-8 text-zinc-500 text-sm">No hay otros admins</div>}
           </div>
+          {changePass && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+              <h4 className="font-medium mb-2">Cambiar contrasena de {changePass.name}</h4>
+              <div className="flex gap-2">
+                <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-zinc-800 border-zinc-700 max-w-xs" />
+                <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
+                <Button variant="ghost" onClick={() => setChangePass(null)}>Cancelar</Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
+        {/* ORDERS */}
         <TabsContent value="orders" className="space-y-3">
           {lo ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-yellow-500 animate-spin" /></div> : orders?.length === 0 ? <div className="text-center py-20 text-zinc-500"><ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No hay pedidos</p></div> : (
             orders?.map(o => {
@@ -154,12 +210,12 @@ export default function AdminPage() {
                       <Badge className={o.status === "pending" ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/30" : o.status === "approved" ? "bg-green-500/10 text-green-500 border-green-500/30" : "bg-red-500/10 text-red-500 border-red-500/30"}>{o.status === "pending" ? "Pendiente" : o.status === "approved" ? "Aprobado" : "Rechazado"}</Badge>
                       <div className="text-left"><p className="font-medium text-sm">Pedido #{o.id}</p><p className="text-xs text-zinc-400">{fmt(o.createdAt)} - {o.paymentType}</p></div>
                     </div>
-                    <div className="flex items-center gap-4"><span className="font-bold text-yellow-500">{formatPrice(o.totalAmount)}</span>{isExp ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</div>
+                    <div className="flex items-center gap-4"><span className="font-bold text-yellow-500">{formatPrice(o.totalAmount)}</span></div>
                   </button>
                   {isExp && (
                     <div className="px-4 pb-4 border-t border-zinc-800 pt-3">
                       {o.notes && <p className="text-sm text-zinc-400 mb-2 bg-zinc-800/50 p-2 rounded">Notas: {o.notes}</p>}
-                      {o.status === "pending" && <div className="flex gap-2"><Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700"><CheckCircle className="w-4 h-4 mr-1" /> Aprobar</Button><Button size="sm" variant="outline" onClick={() => rej.mutate({ id: o.id })} className="border-red-600 text-red-500"><XCircle className="w-4 h-4 mr-1" /> Rechazar</Button></div>}
+                      {o.status === "pending" && <div className="flex gap-2"><Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700">Aprobar</Button><Button size="sm" variant="outline" onClick={() => rej.mutate({ id: o.id })} className="border-red-600 text-red-500">Rechazar</Button></div>}
                     </div>
                   )}
                 </div>
@@ -168,28 +224,21 @@ export default function AdminPage() {
           )}
         </TabsContent>
 
+        {/* IMPORT */}
         <TabsContent value="import" className="space-y-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
             <h3 className="font-semibold text-lg mb-2">Sincronizacion con Tiendanube</h3>
-            <p className="text-zinc-400 text-sm mb-4">Importa productos desde tu tienda Tiendanube.</p>
+            <p className="text-zinc-400 text-sm mb-4">Importa todos los productos de tu tienda Tiendanube. Los que no esten en Tiendanube se eliminan.</p>
             <div className="flex gap-3">
               <Button onClick={() => sync.mutate()} disabled={sync.isPending} className="bg-yellow-500 hover:bg-yellow-600 text-black">{sync.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />} Sincronizar</Button>
               <Button onClick={() => test.mutate()} variant="outline" className="border-zinc-700">Probar conexion</Button>
             </div>
-            {sync.isSuccess && (
-              <div className="mt-3 space-y-1">
-                <p className="text-green-400 text-sm">{sync.data.imported} productos importados/actualizados</p>
-                {sync.data.deleted !== undefined && sync.data.deleted > 0 && (
-                  <p className="text-orange-400 text-sm">{sync.data.deleted} productos eliminados (no estaban en Tiendanube)</p>
-                )}
-                <p className="text-zinc-500 text-xs">La lista ahora coincide exactamente con tu tienda Tiendanube</p>
-              </div>
-            )}
+            {sync.isSuccess && <p className="text-green-400 text-sm mt-3">{sync.data.imported} productos importados{sync.data.deleted ? `, ${sync.data.deleted} eliminados` : ""}</p>}
             {sync.isError && <p className="text-red-400 text-sm mt-3">Error: {sync.error.message}</p>}
-            {test.isSuccess && <p className={`text-sm mt-3 ${test.data.ok ? "text-green-400" : "text-red-400"}`}>{test.data.ok ? "Conexion OK" : "Fallo la conexion"}</p>}
           </div>
         </TabsContent>
 
+        {/* SETTINGS */}
         <TabsContent value="settings" className="space-y-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
             <h3 className="font-semibold text-lg mb-4">Configuracion</h3>
@@ -197,18 +246,11 @@ export default function AdminPage() {
               {(["storeName", "whatsappNumber", "tiendanubeApiToken", "tiendanubeStoreId", "webhookUrl"] as const).map(k => (
                 <div key={k} className={k === "webhookUrl" ? "md:col-span-2" : ""}>
                   <label className="text-sm text-zinc-400 mb-1 block capitalize">{k === "storeName" ? "Nombre de la tienda" : k === "whatsappNumber" ? "WhatsApp" : k === "tiendanubeApiToken" ? "API Token Tiendanube" : k === "tiendanubeStoreId" ? "Store ID Tiendanube" : "Webhook URL (n8n)"}</label>
-                  <Input defaultValue={(settings as any)?.[k] ?? ""} onChange={e => { const v = e.target.value; const el = e.target; el.dataset.value = v; }} className="bg-zinc-800 border-zinc-700 setting-input" data-key={k} />
+                  <Input defaultValue={(settings as any)?.[k] ?? ""} onChange={e => { const el = e.target; el.dataset.value = e.target.value; }} className="bg-zinc-800 border-zinc-700 setting-input" data-key={k} />
                 </div>
               ))}
             </div>
-            <div className="mt-4">
-              <Button onClick={() => {
-                const inputs = document.querySelectorAll(".setting-input") as NodeListOf<HTMLInputElement>;
-                const data: Record<string, string> = {};
-                inputs.forEach(i => { if (i.dataset.value) data[i.dataset.key!] = i.dataset.value; });
-                upSet.mutate(data);
-              }} disabled={upSet.isPending} className="bg-yellow-500 hover:bg-yellow-600 text-black">{upSet.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />} Guardar</Button>
-            </div>
+            <Button onClick={() => { const vals: Record<string, string> = {}; document.querySelectorAll(".setting-input").forEach(i => { const el = i as HTMLInputElement; if (el.dataset.value) vals[el.dataset.key!] = el.dataset.value; }); upSet.mutate(vals); }} disabled={upSet.isPending} className="mt-4 bg-yellow-500 hover:bg-yellow-600 text-black">{upSet.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />} Guardar</Button>
           </div>
         </TabsContent>
       </Tabs>
