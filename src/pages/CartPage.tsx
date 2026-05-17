@@ -177,9 +177,14 @@ export default function CartPage() {
     const dataUrl = doc.output('datauristring');
     pdfDataUrlRef.current = dataUrl;
 
-    // Si estamos en la app nativa, abrir data URL en nueva ventana (el WebView lo intercepta)
+    // Guardar en variable global para que la app nativa lo pida
+    const w = window as any;
+    w._lastPdfBase64 = dataUrl;
+    w._lastPdfFilename = `pedido-genio-${Date.now()}.pdf`;
+
+    // Si estamos en la app nativa, navegar a URL scheme custom que Android intercepta
     if (isNativeApp()) {
-      window.open(dataUrl, '_blank');
+      window.location.href = 'genio://download-pdf';
     } else {
       // Navegador normal: descarga tradicional
       doc.save(`pedido-genio-${Date.now()}.pdf`);
