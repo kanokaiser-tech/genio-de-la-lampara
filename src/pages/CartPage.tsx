@@ -68,6 +68,13 @@ export default function CartPage() {
   const savings = totalList - total;
 
   /* ---------------------------------------------------------------- */
+  /*  Detectar si estamos en la app nativa                              */
+  /* ---------------------------------------------------------------- */
+  const isNativeApp = () => {
+    return navigator.userAgent.includes("GenioApp");
+  };
+
+  /* ---------------------------------------------------------------- */
   /*  PDF generator  —  con GANANCIA NETA                              */
   /* ---------------------------------------------------------------- */
   const generatePDF = useCallback((orderItems: OrderItemPDF[], meta: { total: number; totalList: number; totalProfit: number }) => {
@@ -166,13 +173,19 @@ export default function CartPage() {
     doc.text(`Margen de ganancia: ${pct}%`, 120, y);
     doc.setTextColor(0, 0, 0);
 
-    doc.save(`pedido-genio-${Date.now()}.pdf`);
+    // Generar dataURL para posible re-descarga o app nativa
+    const dataUrl = doc.output('datauristring');
+    pdfDataUrlRef.current = dataUrl;
 
-    // Guardar como dataURL para compartir
-    try {
-      pdfDataUrlRef.current = doc.output('dataurlstring');
-    } catch {
-      pdfDataUrlRef.current = null;
+    // Si estamos en la app nativa, enviar al bridge
+    if (isNativeApp()) {
+      const w = window as any;
+      if (w.GenioPDF && w.GenioPDF.download) {
+        w.GenioPDF.download(dataUrl, `pedido-genio-${Date.now()}.pdf`);
+      }
+    } else {
+      // Navegador normal: descarga tradicional
+      doc.save(`pedido-genio-${Date.now()}.pdf`);
     }
   }, [user?.name, paymentType, notes]);
 
