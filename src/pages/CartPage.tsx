@@ -349,7 +349,12 @@ export default function CartPage() {
               handleReDownloadPDF();
               // Si hay admin con telefono, mostrar mensaje
               if (myAdmin?.phone) {
-                window.open(`https://wa.me/${myAdmin.phone.replace(/\D/g, '')}`, '_blank');
+                // En app nativa usar window.location para que el WebView lo intercepte
+                if (isNativeApp()) {
+                  window.location.href = `https://wa.me/${myAdmin.phone.replace(/\D/g, '')}`;
+                } else {
+                  window.open(`https://wa.me/${myAdmin.phone.replace(/\D/g, '')}`, '_blank');
+                }
               }
             }}
           >
