@@ -177,12 +177,9 @@ export default function CartPage() {
     const dataUrl = doc.output('datauristring');
     pdfDataUrlRef.current = dataUrl;
 
-    // Si estamos en la app nativa, enviar al bridge
+    // Si estamos en la app nativa, abrir data URL en nueva ventana (el WebView lo intercepta)
     if (isNativeApp()) {
-      const w = window as any;
-      if (w.GenioPDF && w.GenioPDF.download) {
-        w.GenioPDF.download(dataUrl, `pedido-genio-${Date.now()}.pdf`);
-      }
+      window.open(dataUrl, '_blank');
     } else {
       // Navegador normal: descarga tradicional
       doc.save(`pedido-genio-${Date.now()}.pdf`);
