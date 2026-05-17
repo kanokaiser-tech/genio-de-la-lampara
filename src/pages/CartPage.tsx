@@ -165,18 +165,7 @@ export default function CartPage() {
     doc.text(`Margen de ganancia: ${pct}%`, 120, y);
     doc.setTextColor(0, 0, 0);
 
-    /* Compatibilidad WebView: usar data URI en vez de blob */
-    try {
-      const pdfData = doc.output('datauristring');
-      const link = document.createElement('a');
-      link.href = pdfData;
-      link.download = `pedido-genio-${Date.now()}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch {
-      doc.save(`pedido-genio-${Date.now()}.pdf`);
-    }
+    doc.save(`pedido-genio-${Date.now()}.pdf`);
   }, [user?.name, paymentType, notes]);
 
   /* ---------------------------------------------------------------- */
@@ -327,14 +316,15 @@ export default function CartPage() {
         {/* ===== BOTON PRINCIPAL: WHATSAPP ===== */}
         <div className="space-y-3 mb-8">
           {whatsappUrl ? (
-            <Button
-              className="w-full py-7 text-lg font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 transition-all hover:shadow-xl hover:shadow-green-900/30 hover:-translate-y-0.5"
-              size="lg"
-              onClick={() => window.open(whatsappUrl, '_system')}
-            >
-              <WhatsAppIcon className="w-6 h-6 mr-3" />
-              Enviar pedido por WhatsApp
-            </Button>
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="block">
+              <Button
+                className="w-full py-7 text-lg font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 transition-all hover:shadow-xl hover:shadow-green-900/30 hover:-translate-y-0.5"
+                size="lg"
+              >
+                <WhatsAppIcon className="w-6 h-6 mr-3" />
+                Enviar pedido por WhatsApp
+              </Button>
+            </a>
           ) : (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-center">
               <MessageCircle className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
