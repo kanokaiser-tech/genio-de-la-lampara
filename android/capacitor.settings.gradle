@@ -1,0 +1,3 @@
+// Capacitor Android module (bundled locally for CI build)
+include ':capacitor-android'
+project(':capacitor-android').projectDir = new File('./capacitor-android/capacitor')

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Genio Revendedores</string>
+    <string name="title_activity_main">Genio Revendedores</string>
+    <string name="package_name">com.genio.revendedores</string>
+    <string name="custom_url_scheme">com.genio.revendedores</string>
+</resources>
