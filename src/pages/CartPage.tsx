@@ -182,9 +182,14 @@ export default function CartPage() {
     w._lastPdfBase64 = dataUrl;
     w._lastPdfFilename = `pedido-genio-${Date.now()}.pdf`;
 
-    // Si estamos en la app nativa, navegar a URL scheme custom que Android intercepta
+    // Si estamos en la app nativa, abrir enlace que Android intercepta
     if (isNativeApp()) {
-      window.location.href = 'genio://download-pdf';
+      const a = document.createElement('a');
+      a.href = 'genio://download-pdf';
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } else {
       // Navegador normal: descarga tradicional
       doc.save(`pedido-genio-${Date.now()}.pdf`);
