@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq, desc } from "drizzle-orm";
 import { createRouter, userQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { orders, orderItems, users } from "@db/schema";
+import { orders, orderItems, users, products, settings } from "@db/schema";
 
 export const orderRouter = createRouter({
   /* ================================================================
@@ -17,9 +17,9 @@ export const orderRouter = createRouter({
       const db = getDb();
       const userId = ctx.user.id;
 
-      // Get cart items with product data
+      // Get cart items with product data (including tiendanube IDs)
       const cartRows = await db.execute(
-        `SELECT c.*, p.name as productName, p.priceCash30, p.priceTransfer25, p.priceList
+        `SELECT c.*, p.name as productName, p.priceCash30, p.priceTransfer25, p.priceList, p.tiendanubeId
          FROM cartItems c
          JOIN products p ON c.productId = p.id
          WHERE c.userId = ${userId}` as any
@@ -47,13 +47,14 @@ export const orderRouter = createRouter({
       });
       const orderId = Number((orderResult as any)[0].insertId);
 
-      // Insert order items
+      // Insert order items with tiendanubeProductId
       for (const item of cartItems2) {
         const unitPrice = Number(item[priceField]);
         await db.insert(orderItems).values({
           orderId,
           productId: item.productId,
           productName: item.productName,
+          tiendanubeProductId: item.tiendanubeId ? String(item.tiendanubeId) : null,
           quantity: item.quantity,
           price: unitPrice.toFixed(2),
           subtotal: (unitPrice * item.quantity).toFixed(2),
@@ -85,11 +86,8 @@ export const orderRouter = createRouter({
     // Obtener TODOS los pedidos primero
     const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
 
-    // Obtener datos de los revendedores (users que hicieron los pedidos)
-    const revIds = [...new Set(allOrders.map(o => o.userId))];
-    const revUsers = revIds.length > 0
-      ? await db.select().from(users).where(eq(users.role, "revendedor"))
-      : [];
+    // Obtener datos de los revendedores
+    const revUsers = await db.select().from(users).where(eq(users.role, "revendedor"));
 
     // Filtrar solo los que pertenecen a este admin
     const myRevIds = new Set(
@@ -112,7 +110,7 @@ export const orderRouter = createRouter({
     }
 
     // Mapear revendedores por ID
-    const revById: Record<number, typeof users.$inferSelect> = {};
+    const revById: Record<number, typeof revUsers[0]> = {};
     for (const u of revUsers) revById[u.id] = u;
 
     return myOrders.map(o => ({
@@ -154,12 +152,62 @@ export const orderRouter = createRouter({
     }),
 
   /* ================================================================
-     ADMIN: Aprobar pedido
+     ADMIN: Aprobar pedido (con descuento de stock en Tiendanube)
      ================================================================ */
   approve: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+
+      // Obtener items del pedido con datos de productos
+      const items = await db.select().from(orderItems)
+        .where(eq(orderItems.orderId, input.id));
+
+      // Obtener configuracion de Tiendanube
+      const [s] = await db.select().from(settings).limit(1);
+
+      // Descuento de stock en Tiendanube y local
+      for (const item of items) {
+        if (!item.tiendanubeProductId) continue;
+
+        // Obtener producto local para tener el variantId y stock actual
+        const prodRows = await db.select().from(products)
+          .where(eq(products.tiendanubeId, item.tiendanubeProductId));
+        if (prodRows.length === 0) continue;
+        const product = prodRows[0];
+
+        if (!product.tiendanubeVariantId) continue;
+
+        const newStock = Math.max(0, (product.stock ?? 0) - item.quantity);
+
+        // Actualizar en Tiendanube
+        if (s?.tiendanubeApiToken && s?.tiendanubeStoreId) {
+          try {
+            await fetch(
+              `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authentication: `bearer ${s.tiendanubeApiToken}`,
+                  "User-Agent": "Portal-Revendedores/1.0",
+                },
+                body: JSON.stringify({
+                  variants: [{ id: Number(product.tiendanubeVariantId), stock: newStock }],
+                }),
+              }
+            );
+          } catch {
+            // Si falla la llamada a Tiendanube, seguimos con el stock local
+          }
+        }
+
+        // Actualizar stock local
+        await db.update(products).set({ stock: newStock })
+          .where(eq(products.id, product.id));
+      }
+
+      // Actualizar estado del pedido
       await db.update(orders).set({ status: "approved" })
         .where(eq(orders.id, input.id));
 
@@ -208,9 +256,7 @@ export const orderRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      // Primero eliminar items (foreign key)
       await db.delete(orderItems).where(eq(orderItems.orderId, input.id));
-      // Luego eliminar el pedido
       await db.delete(orders).where(eq(orders.id, input.id));
       return { success: true };
     }),

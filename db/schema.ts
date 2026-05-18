@@ -36,7 +36,8 @@ export const products = mysqlTable("products", {
   priceTransfer25: decimal("priceTransfer25", { precision: 12, scale: 2 }).notNull(),
   stock: int("stock").default(0).notNull(),
   imageUrl: text("imageUrl"),
-  tiendanubeId: varchar("tiendanubeId", { length: 100 }),
+  tiendanubeId: varchar("tiendanubeId", { length: 100 }), // ID del producto en TN
+  tiendanubeVariantId: varchar("tiendanubeVariantId", { length: 100 }), // ID de la variante en TN (para stock)
   slug: varchar("slug", { length: 500 }).unique(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -67,6 +68,7 @@ export const orderItems = mysqlTable("orderItems", {
   orderId: bigint("orderId", { mode: "number", unsigned: true }).notNull(),
   productId: bigint("productId", { mode: "number", unsigned: true }).notNull(),
   productName: varchar("productName", { length: 500 }).notNull(),
+  tiendanubeProductId: varchar("tiendanubeProductId", { length: 100 }), // Para actualizar stock en TN al aprobar
   quantity: int("quantity").notNull(),
   price: decimal("price", { precision: 12, scale: 2 }).notNull(),
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),

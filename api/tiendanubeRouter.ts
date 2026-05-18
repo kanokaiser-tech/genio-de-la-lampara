@@ -1,13 +1,14 @@
+import { z } from "zod";
 import { createRouter, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { settings, products } from "@db/schema";
-import { sql, inArray } from "drizzle-orm";
+import { sql, inArray, eq } from "drizzle-orm";
 
 interface TnProduct {
   id: number;
   name: Record<string, string> | string;
   handle?: Record<string, string> | string;
-  variants?: Array<{ price?: number | string }>;
+  variants?: Array<{ id?: number; price?: number | string; stock?: number | null }>;
   categories?: Array<{ name: Record<string, string> | string }>;
   images?: Array<{ src?: string }>;
   published?: boolean;
@@ -78,19 +79,21 @@ export const tiendanubeRouter = createRouter({
       const name = getTranslation(tnProduct.name);
       const slug = getTranslation(tnProduct.handle);
       const category = getTranslation(tnProduct.categories?.[0]?.name);
-      const variantPrice = parseFloat(String(tnProduct.variants?.[0]?.price ?? 0));
+      const firstVariant = tnProduct.variants?.[0];
+      const variantPrice = parseFloat(String(firstVariant?.price ?? 0));
       const originalPrice = isNaN(variantPrice) ? 0 : variantPrice;
       const priceCash30 = Math.round(originalPrice * 0.7 * 100) / 100;
       const priceTransfer25 = Math.round(originalPrice * 0.75 * 100) / 100;
-      const inStock = tnProduct.published ?? true;
+      const tnStock = firstVariant?.stock ?? (tnProduct.published ? 999 : 0);
       const imageUrl = tnProduct.images?.[0]?.src ?? null;
+      const variantId = firstVariant?.id ? String(firstVariant.id) : null;
 
       if (!slug) continue;
       seenSlugs.push(slug);
 
       await getDb().execute(sql`
-        INSERT INTO products (name, priceList, priceCash30, priceTransfer25, category, stock, imageUrl, slug, tiendanubeId, active)
-        VALUES (${name}, ${originalPrice.toFixed(2)}, ${priceCash30.toFixed(2)}, ${priceTransfer25.toFixed(2)}, ${category}, ${inStock ? 1 : 0}, ${imageUrl}, ${slug}, ${String(tnProduct.id)}, TRUE)
+        INSERT INTO products (name, priceList, priceCash30, priceTransfer25, category, stock, imageUrl, slug, tiendanubeId, tiendanubeVariantId, active)
+        VALUES (${name}, ${originalPrice.toFixed(2)}, ${priceCash30.toFixed(2)}, ${priceTransfer25.toFixed(2)}, ${category}, ${tnStock}, ${imageUrl}, ${slug}, ${String(tnProduct.id)}, ${variantId}, TRUE)
         ON DUPLICATE KEY UPDATE
           name = VALUES(name),
           priceList = VALUES(priceList),
@@ -100,6 +103,7 @@ export const tiendanubeRouter = createRouter({
           stock = VALUES(stock),
           imageUrl = VALUES(imageUrl),
           tiendanubeId = VALUES(tiendanubeId),
+          tiendanubeVariantId = VALUES(tiendanubeVariantId),
           active = TRUE
       `);
       imported++;
@@ -133,6 +137,91 @@ export const tiendanubeRouter = createRouter({
 
     return { imported, deleted };
   }),
+
+  /* ================================================================
+     UPDATE STOCK - Actualiza stock de un producto en Tiendanube
+     ================================================================ */
+  updateStock: adminQuery
+    .input(z.object({
+      productId: z.string(),
+      variantId: z.string(),
+      newStock: z.number().int().min(0),
+    }))
+    .mutation(async ({ input }) => {
+      const [s] = await getDb().select().from(settings).limit(1);
+      if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) {
+        throw new Error("Tiendanube no configurado");
+      }
+      try {
+        const resp = await fetch(
+          `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${input.productId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authentication: `bearer ${s.tiendanubeApiToken}`,
+              "User-Agent": "Portal-Revendedores/1.0",
+            },
+            body: JSON.stringify({
+              variants: [{ id: Number(input.variantId), stock: input.newStock }],
+            }),
+          }
+        );
+        if (!resp.ok) throw new Error(`Tiendanube error: ${resp.status}`);
+
+        // Actualizar stock local tambien
+        await getDb().execute(
+          sql`UPDATE products SET stock = ${input.newStock} WHERE tiendanubeId = ${input.productId} AND tiendanubeVariantId = ${input.variantId}`
+        );
+
+        return { success: true, newStock: input.newStock };
+      } catch (e: any) {
+        throw new Error("Error al actualizar stock en Tiendanube: " + e.message);
+      }
+    }),
+
+  /* ================================================================
+     DELETE PRODUCT - Elimina un producto de Tiendanube y de la app
+     ================================================================ */
+  deleteProduct: adminQuery
+    .input(z.object({
+      productId: z.number(), // ID interno de la tabla products
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+
+      // Obtener datos del producto
+      const rows = await db.select().from(products).where(eq(products.id, input.productId));
+      if (rows.length === 0) throw new Error("Producto no encontrado");
+      const product = rows[0];
+
+      // Si tiene tiendanubeId, eliminar de Tiendanube primero
+      if (product.tiendanubeId) {
+        const [s] = await db.select().from(settings).limit(1);
+        if (s?.tiendanubeApiToken && s?.tiendanubeStoreId) {
+          try {
+            const resp = await fetch(
+              `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${product.tiendanubeId}`,
+              {
+                method: "DELETE",
+                headers: {
+                  Authentication: `bearer ${s.tiendanubeApiToken}`,
+                  "User-Agent": "Portal-Revendedores/1.0",
+                },
+              }
+            );
+            if (!resp.ok) throw new Error(`Tiendanube error: ${resp.status}`);
+          } catch (e: any) {
+            throw new Error("Error al eliminar de Tiendanube: " + e.message);
+          }
+        }
+      }
+
+      // Eliminar de la base de datos local
+      await db.delete(products).where(eq(products.id, input.productId));
+
+      return { success: true };
+    }),
 
   test: adminQuery.mutation(async () => {
     const [s] = await getDb().select().from(settings).limit(1);

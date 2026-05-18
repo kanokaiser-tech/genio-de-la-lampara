@@ -37,6 +37,7 @@ export default function AdminPage() {
   const cProd = trpc.product.create.useMutation({ onSuccess: () => { utils.product.list.invalidate(); setNewProd({ name: "", category: "", priceList: "", stock: "0" }); } });
   const dProd = trpc.product.delete.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const clProd = trpc.product.clearAll.useMutation({ onSuccess: () => utils.product.list.invalidate() });
+  const delTnProd = trpc.tiendanube.deleteProduct.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const cRev = trpc.user.createRevendedor.useMutation({
     onSuccess: () => {
       utils.user.list.invalidate();
@@ -86,16 +87,27 @@ export default function AdminPage() {
           <div className="flex justify-between items-center"><p className="text-sm text-zinc-400">{products?.length ?? 0} productos</p><Button variant="outline" size="sm" onClick={() => clProd.mutate()} className="border-red-600 text-red-500"><Trash2 className="w-3 h-3 mr-1" /> Vaciar</Button></div>
           {lp ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-yellow-500 animate-spin" /></div> : (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-              <div className="hidden md:grid grid-cols-[1fr,150px,120px,120px,120px,80px] gap-4 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase"><span>Nombre</span><span>Categoria</span><span className="text-right">Lista</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span></span></div>
-              {products?.map(p => (
-                <div key={p.id} className="grid grid-cols-[1fr,150px,120px,120px,120px,80px] gap-4 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
-                  <span className="truncate">{p.name}</span><span className="text-zinc-400 text-sm">{p.category}</span>
-                  <span className="text-right text-zinc-400 line-through">{formatPrice(p.priceList)}</span>
-                  <span className="text-right text-yellow-500 font-medium">{formatPrice(p.priceCash30)}</span>
-                  <span className="text-right text-green-400">{formatPrice(p.priceTransfer25)}</span>
-                  <button onClick={() => dProd.mutate({ id: p.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))}
+              <div className="hidden md:grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase"><span>Nombre</span><span>Categoria</span><span className="text-center">Stock</span><span className="text-right">Lista</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Acciones</span></div>
+              {products?.map(p => {
+                const stockNum = Number(p.stock ?? 0);
+                const stockColor = stockNum <= 0 ? "text-red-500" : stockNum <= 5 ? "text-orange-400" : stockNum <= 10 ? "text-yellow-400" : "text-green-400";
+                return (
+                  <div key={p.id} className="grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
+                    <span className="truncate">{p.name}</span>
+                    <span className="text-zinc-400 text-sm">{p.category}</span>
+                    <span className={`text-center font-bold ${stockColor}`}>{stockNum}</span>
+                    <span className="text-right text-zinc-400 line-through">{formatPrice(p.priceList)}</span>
+                    <span className="text-right text-yellow-500 font-medium">{formatPrice(p.priceCash30)}</span>
+                    <span className="text-right text-green-400">{formatPrice(p.priceTransfer25)}</span>
+                    <div className="flex justify-center gap-1">
+                      {p.tiendanubeId && (
+                        <button onClick={() => { if (confirm('Eliminar de Tiendanube tambien?')) delTnProd.mutate({ productId: p.id }); }} className="text-zinc-600 hover:text-red-500" title="Eliminar de Tiendanube"><Trash2 className="w-3.5 h-3.5" /></button>
+                      )}
+                      <button onClick={() => dProd.mutate({ id: p.id })} className="text-zinc-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </TabsContent>
