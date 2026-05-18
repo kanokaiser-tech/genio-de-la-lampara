@@ -182,14 +182,14 @@ export default function CartPage() {
     w._lastPdfBase64 = dataUrl;
     w._lastPdfFilename = `pedido-genio-${Date.now()}.pdf`;
 
-    // Si estamos en la app nativa, abrir enlace que Android intercepta
+    // Si estamos en la app nativa, usar window.prompt como puente Java->JS
     if (isNativeApp()) {
-      const a = document.createElement('a');
-      a.href = 'genio://download-pdf';
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      try {
+        const bridgeMsg = JSON.stringify({ action: 'downloadPDF', dataUrl, filename: `pedido-genio-${Date.now()}.pdf` });
+        window.prompt('genio-bridge', bridgeMsg);
+      } catch {
+        doc.save(`pedido-genio-${Date.now()}.pdf`);
+      }
     } else {
       // Navegador normal: descarga tradicional
       doc.save(`pedido-genio-${Date.now()}.pdf`);
