@@ -1,101 +1,217 @@
 import { z } from "zod";
-import { createRouter, adminQuery, authedQuery } from "./middleware";
+import { eq, desc } from "drizzle-orm";
+import { createRouter, userQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { orders, orderItems, cartItems, products } from "@db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { orders, orderItems, users } from "@db/schema";
 
 export const orderRouter = createRouter({
-  myOrders: authedQuery.query(async ({ ctx }) => {
-    return getDb().select().from(orders).where(eq(orders.userId, ctx.user.id)).orderBy(desc(orders.createdAt));
-  }),
+  /* ================================================================
+     CREATE - Revendedor crea un pedido
+     ================================================================ */
+  create: userQuery
+    .input(z.object({
+      paymentType: z.enum(["efectivo", "transferencia"]),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const userId = ctx.user.id;
 
-  myOrdersAsAdmin: adminQuery.query(async ({ ctx }) => {
-    return getDb().select().from(orders).where(eq(orders.adminId, ctx.user.id)).orderBy(desc(orders.createdAt));
-  }),
+      // Get cart items with product data
+      const cartRows = await db.execute(
+        `SELECT c.*, p.name as productName, p.priceCash30, p.priceTransfer25, p.priceList
+         FROM cartItems c
+         JOIN products p ON c.productId = p.id
+         WHERE c.userId = ${userId}` as any
+      );
+      const cartItems2 = (cartRows as any)[0] as any[];
 
-  pendingOrders: adminQuery.query(async ({ ctx }) => {
-    return getDb().select().from(orders).where(and(eq(orders.adminId, ctx.user.id), eq(orders.status, "pending"))).orderBy(desc(orders.createdAt));
-  }),
+      if (!cartItems2 || cartItems2.length === 0) {
+        throw new Error("Carrito vacio");
+      }
 
-  byId: authedQuery.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
-    const [order] = await getDb().select().from(orders).where(eq(orders.id, input.id)).limit(1);
-    if (!order) return null;
-    if (order.userId !== ctx.user.id && order.adminId !== ctx.user.id) return null;
-    const items = await getDb().select().from(orderItems).where(eq(orderItems.orderId, input.id));
-    return { ...order, items };
-  }),
+      const priceField = input.paymentType === "efectivo" ? "priceCash30" : "priceTransfer25";
+      const total = cartItems2.reduce((sum: number, item: any) => {
+        return sum + (Number(item[priceField]) * item.quantity);
+      }, 0);
 
-  create: authedQuery.input(z.object({
-    paymentType: z.enum(["efectivo", "transferencia"]),
-    notes: z.string().optional(),
-  })).mutation(async ({ ctx, input }) => {
-    const cart = await getDb().select().from(cartItems).innerJoin(products, eq(cartItems.productId, products.id)).where(eq(cartItems.userId, ctx.user.id));
-    if (cart.length === 0) throw new Error("Carrito vacio");
+      // Insert order
+      const orderResult = await db.insert(orders).values({
+        userId,
+        adminId: ctx.user.parentId ?? userId,
+        totalAmount: total.toFixed(2),
+        paymentType: input.paymentType,
+        status: "pending",
+        notes: input.notes || null,
+        webhookSent: false,
+      });
+      const orderId = Number((orderResult as any)[0].insertId);
 
-    const adminId = ctx.user.role === "revendedor" ? (ctx.user.parentId ?? 1) : ctx.user.id;
-
-    const priceField = input.paymentType === "efectivo" ? "priceCash30" : "priceTransfer25";
-    let total = 0;
-
-    const orderItemsData = cart.map((item) => {
-      const price = Number(item.products[priceField]);
-      const subtotal = price * item.cartItems.quantity;
-      total += subtotal;
-      return {
-        productId: item.cartItems.productId,
-        productName: item.products.name,
-        quantity: item.cartItems.quantity,
-        price: price.toFixed(2),
-        subtotal: subtotal.toFixed(2),
-      };
-    });
-
-    const [result] = await getDb().insert(orders).values({
-      userId: ctx.user.id,
-      adminId,
-      status: "pending",
-      paymentType: input.paymentType,
-      notes: input.notes ?? null,
-      totalAmount: total.toFixed(2),
-    }).$returningId();
-
-    const orderId = result!.id;
-
-    for (const item of orderItemsData) {
-      await getDb().insert(orderItems).values({ ...item, orderId });
-    }
-
-    await getDb().delete(cartItems).where(eq(cartItems.userId, ctx.user.id));
-
-    return { orderId };
-  }),
-
-  approve: adminQuery.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-    const [order] = await getDb().select().from(orders).where(eq(orders.id, input.id)).limit(1);
-    if (!order || order.adminId !== ctx.user.id) throw new Error("No autorizado");
-
-    await getDb().update(orders).set({ status: "approved" }).where(eq(orders.id, input.id));
-
-    // Send webhook
-    try {
-      const settingsRows = await getDb().select().from(await import("@db/schema").then(m => m.settings));
-      const webhookUrl = settingsRows[0]?.webhookUrl;
-      if (webhookUrl) {
-        await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event: "order.approved", orderId: input.id }),
+      // Insert order items
+      for (const item of cartItems2) {
+        const unitPrice = Number(item[priceField]);
+        await db.insert(orderItems).values({
+          orderId,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          price: unitPrice.toFixed(2),
+          subtotal: (unitPrice * item.quantity).toFixed(2),
         });
       }
-    } catch { /* ignore */ }
 
-    return { success: true };
+      // Clear cart
+      await db.execute(`DELETE FROM cartItems WHERE userId = ${userId}` as any);
+
+      return { id: orderId, total };
+    }),
+
+  /* ================================================================
+     MY ORDERS - Para el revendedor
+     ================================================================ */
+  myOrders: userQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    return db.select().from(orders)
+      .where(eq(orders.userId, ctx.user.id))
+      .orderBy(desc(orders.createdAt));
   }),
 
-  reject: adminQuery.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-    const [order] = await getDb().select().from(orders).where(eq(orders.id, input.id)).limit(1);
-    if (!order || order.adminId !== ctx.user.id) throw new Error("No autorizado");
-    await getDb().update(orders).set({ status: "rejected" }).where(eq(orders.id, input.id));
-    return { success: true };
+  /* ================================================================
+     ADMIN: Listar pedidos de mis revendedores CON datos del revendedor
+     ================================================================ */
+  myOrdersAsAdmin: adminQuery.query(async ({ ctx }) => {
+    const db = getDb();
+
+    // Obtener TODOS los pedidos primero
+    const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
+
+    // Obtener datos de los revendedores (users que hicieron los pedidos)
+    const revIds = [...new Set(allOrders.map(o => o.userId))];
+    const revUsers = revIds.length > 0
+      ? await db.select().from(users).where(eq(users.role, "revendedor"))
+      : [];
+
+    // Filtrar solo los que pertenecen a este admin
+    const myRevIds = new Set(
+      revUsers.filter(u => u.parentId === ctx.user.id).map(u => u.id)
+    );
+
+    const myOrders = allOrders.filter(o => myRevIds.has(o.userId));
+    if (myOrders.length === 0) return [];
+
+    // Obtener items de cada pedido
+    const orderIds = myOrders.map(o => o.id);
+    const allItems = await db.select().from(orderItems);
+    const itemsFiltered = allItems.filter(item => orderIds.includes(item.orderId));
+
+    // Agrupar items por orderId
+    const itemsByOrder: Record<number, typeof allItems> = {};
+    for (const item of itemsFiltered) {
+      if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+      itemsByOrder[item.orderId].push(item);
+    }
+
+    // Mapear revendedores por ID
+    const revById: Record<number, typeof users.$inferSelect> = {};
+    for (const u of revUsers) revById[u.id] = u;
+
+    return myOrders.map(o => ({
+      ...o,
+      revendedorName: revById[o.userId]?.name ?? "Desconocido",
+      revendedorEmail: revById[o.userId]?.email ?? "",
+      revendedorPhone: revById[o.userId]?.phone ?? "",
+      items: itemsByOrder[o.id] || [],
+    }));
   }),
+
+  /* ================================================================
+     ADMIN: Ver detalle de un pedido (con items y revendedor)
+     ================================================================ */
+  detail: adminQuery
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+
+      const orderData = await db.select().from(orders)
+        .where(eq(orders.id, input.id));
+      if (orderData.length === 0) return null;
+      const order = orderData[0];
+
+      const revData = await db.select().from(users)
+        .where(eq(users.id, order.userId));
+      const rev = revData[0];
+
+      const items = await db.select().from(orderItems)
+        .where(eq(orderItems.orderId, input.id));
+
+      return {
+        ...order,
+        revendedorName: rev?.name ?? "Desconocido",
+        revendedorEmail: rev?.email ?? "",
+        revendedorPhone: rev?.phone ?? "",
+        items,
+      };
+    }),
+
+  /* ================================================================
+     ADMIN: Aprobar pedido
+     ================================================================ */
+  approve: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(orders).set({ status: "approved" })
+        .where(eq(orders.id, input.id));
+
+      // Webhook
+      try {
+        const orderData = await db.select().from(orders)
+          .where(eq(orders.id, input.id));
+        const order = orderData[0];
+        if (order) {
+          const webhookUrl = process.env.WEBHOOK_URL;
+          if (webhookUrl) {
+            await fetch(webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                event: "order.approved",
+                orderId: order.id,
+                total: order.totalAmount,
+                paymentType: order.paymentType,
+                status: "approved",
+              }),
+            });
+          }
+        }
+      } catch {}
+
+      return { success: true };
+    }),
+
+  /* ================================================================
+     ADMIN: Rechazar pedido
+     ================================================================ */
+  reject: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(orders).set({ status: "rejected" })
+        .where(eq(orders.id, input.id));
+      return { success: true };
+    }),
+
+  /* ================================================================
+     ADMIN: Eliminar pedido
+     ================================================================ */
+  delete: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      // Primero eliminar items (foreign key)
+      await db.delete(orderItems).where(eq(orderItems.orderId, input.id));
+      // Luego eliminar el pedido
+      await db.delete(orders).where(eq(orders.id, input.id));
+      return { success: true };
+    }),
 });
