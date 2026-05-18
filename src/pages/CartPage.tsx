@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ShoppingCart, ArrowLeft, FileText, Loader2, Download, User } from "lucide-react";
+import { ShoppingCart, ArrowLeft, FileText, Loader2, Download, User, MessageCircle } from "lucide-react";
 import { Link } from "react-router";
 import jsPDF from "jspdf";
 
@@ -235,8 +235,26 @@ export default function CartPage() {
   };
 
   /* ---------------------------------------------------------------- */
-  /*  Compartir PDF helper                                              */
+  /*  WhatsApp helpers                                                  */
   /* ---------------------------------------------------------------- */
+  const buildWhatsAppMessage = (): string => {
+    const lines = orderItemsRef.current.map(
+      item => `• ${item.productName} x${item.quantity} = $${item.subtotal.toLocaleString("es-AR")} (Gana: +$${item.profitSubtotal.toLocaleString("es-AR")})`
+    );
+    const msg =
+      `Hola ${myAdmin?.name ?? ""}! Te envio mi pedido de Genio de la Lampara:\n\n` +
+      lines.join("\n") +
+      `\n\nTu precio total: $${orderMeta.total.toLocaleString("es-AR")}` +
+      `\nGanancia neta: +$${orderMeta.totalProfit.toLocaleString("es-AR")}` +
+      `\nPago: ${paymentType === "efectivo" ? "Efectivo (30% descuento)" : "Transferencia (25% descuento)"}` +
+      (notes ? `\nNotas: ${notes}` : "") +
+      `\nRevendedor: ${user?.name ?? ""}`;
+    return encodeURIComponent(msg);
+  };
+
+  const whatsappUrl = myAdmin?.phone
+    ? `https://wa.me/${myAdmin.phone.replace(/\D/g, "")}?text=${buildWhatsAppMessage()}`
+    : null;
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                            */
@@ -323,49 +341,27 @@ export default function CartPage() {
 
         {/* ===== BOTON PRINCIPAL: WHATSAPP ===== */}
         <div className="space-y-3 mb-8">
-          <Button
-            className="w-full py-7 text-lg font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 transition-all hover:shadow-xl hover:shadow-green-900/30 hover:-translate-y-0.5"
-            size="lg"
-            onClick={async () => {
-              // Compartir el PDF
-              if (pdfDataUrlRef.current) {
-                try {
-                  // Convertir dataURL a Blob
-                  const res = await fetch(pdfDataUrlRef.current);
-                  const blob = await res.blob();
-                  const file = new File([blob], `pedido-genio-${Date.now()}.pdf`, { type: 'application/pdf' });
-
-                  // Usar Web Share API para compartir el archivo
-                  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                      files: [file],
-                      title: 'Pedido Genio de la Lampara',
-                      text: `Pedido de ${user?.name || 'Revendedor'} - Total: $${orderMeta.total.toLocaleString('es-AR')}`,
-                    });
-                    return;
-                  }
-                } catch {
-                  // Si falla el share, descargar
-                }
-              }
-              // Fallback: descargar el PDF
-              handleReDownloadPDF();
-              // Si hay admin con telefono, mostrar mensaje
-              if (myAdmin?.phone) {
-                // En app nativa usar window.location para que el WebView lo intercepte
+          {whatsappUrl ? (
+            <Button
+              className="w-full py-7 text-lg font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 transition-all hover:shadow-xl hover:shadow-green-900/30 hover:-translate-y-0.5"
+              size="lg"
+              onClick={() => {
                 if (isNativeApp()) {
-                  window.location.href = `https://wa.me/${myAdmin.phone.replace(/\D/g, '')}`;
+                  window.location.href = whatsappUrl;
                 } else {
-                  window.open(`https://wa.me/${myAdmin.phone.replace(/\D/g, '')}`, '_blank');
+                  window.open(whatsappUrl, '_blank');
                 }
-              }
-            }}
-          >
-            <WhatsAppIcon className="w-6 h-6 mr-3" />
-            {myAdmin?.phone ? 'Compartir PDF por WhatsApp' : 'Compartir PDF'}
-          </Button>
-          {!myAdmin?.phone && (
-            <p className="text-xs text-zinc-500 text-center">Tu admin no tiene WhatsApp configurado. Se va a descargar el PDF.</p>
+              }}
+            >
+              <WhatsAppIcon className="w-6 h-6 mr-3" />
+              Enviar pedido por WhatsApp
+            </Button>
+          ) : (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-center">
+              <MessageCircle className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+              <p className="text-sm text-zinc-400">Tu administrador no tiene numero de WhatsApp configurado.</p>
+              <p className="text-xs text-zinc-500 mt-1">Contactalo por otro medio.</p>
+            </div>
           )}
 
           {/* Boton secundario: re-descargar PDF */}
