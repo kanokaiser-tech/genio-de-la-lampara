@@ -182,11 +182,12 @@ export default function CartPage() {
     w._lastPdfBase64 = dataUrl;
     w._lastPdfFilename = `pedido-genio-${Date.now()}.pdf`;
 
-    // Si estamos en la app nativa, guardar en variable global y disparar prompt como trigger
+    // Si estamos en la app nativa, llamar al bridge de Android directamente
     if (isNativeApp()) {
       const w = window as any;
-      w._lastPdfDataUrl = dataUrl;
-      window.prompt('GENIO_DOWNLOAD_PDF', '');
+      if (w.Android && w.Android.downloadPDF) {
+        w.Android.downloadPDF(dataUrl);
+      }
     } else {
       // Navegador normal: descarga tradicional
       doc.save(`pedido-genio-${Date.now()}.pdf`);
