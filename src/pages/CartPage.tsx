@@ -182,14 +182,11 @@ export default function CartPage() {
     w._lastPdfBase64 = dataUrl;
     w._lastPdfFilename = `pedido-genio-${Date.now()}.pdf`;
 
-    // Si estamos en la app nativa, usar window.prompt como puente Java->JS
+    // Si estamos en la app nativa, guardar en variable global y disparar prompt como trigger
     if (isNativeApp()) {
-      try {
-        const bridgeMsg = JSON.stringify({ action: 'downloadPDF', dataUrl, filename: `pedido-genio-${Date.now()}.pdf` });
-        window.prompt('genio-bridge', bridgeMsg);
-      } catch {
-        doc.save(`pedido-genio-${Date.now()}.pdf`);
-      }
+      const w = window as any;
+      w._lastPdfDataUrl = dataUrl;
+      window.prompt('GENIO_DOWNLOAD_PDF', '');
     } else {
       // Navegador normal: descarga tradicional
       doc.save(`pedido-genio-${Date.now()}.pdf`);
