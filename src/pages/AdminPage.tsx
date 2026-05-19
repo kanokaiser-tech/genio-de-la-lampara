@@ -375,7 +375,7 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
               <h3 className="font-semibold mb-3 text-gray-900 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-blue-600" /> Nuevo SuperAdmin
               </h3>
-              <p className="text-xs text-gray-500 mb-3">Maximo 2 superadmins permitidos. Actualmente: {superadmins?.length ?? 0}/2</p>
+              <p className="text-xs text-gray-500 mb-3">Maximo 3 superadmins permitidos. Actualmente: {superadmins?.length ?? 0}/3</p>
               <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
                 <Input placeholder="Nombre" value={newSuperadmin.name} onChange={e => setNewSuperadmin({ ...newSuperadmin, name: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
                 <Input placeholder="Email" type="email" value={newSuperadmin.email} onChange={e => setNewSuperadmin({ ...newSuperadmin, email: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
@@ -383,13 +383,13 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                 <Input placeholder="Contrasena" type="password" value={newSuperadmin.password} onChange={e => setNewSuperadmin({ ...newSuperadmin, password: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
                 <Button
                   onClick={() => cSuperadmin.mutate(newSuperadmin)}
-                  disabled={!newSuperadmin.name || !newSuperadmin.email || !newSuperadmin.password || (superadmins?.length ?? 0) >= 2}
+                  disabled={!newSuperadmin.name || !newSuperadmin.email || !newSuperadmin.password || (superadmins?.length ?? 0) >= 3}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Plus className="w-4 h-4 mr-1" /> Crear SuperAdmin
                 </Button>
               </div>
-              {(superadmins?.length ?? 0) >= 2 && <p className="text-xs text-red-500 mt-2">Ya hay 2 superadmins. Elimina uno para crear otro.</p>}
+              {(superadmins?.length ?? 0) >= 3 && <p className="text-xs text-red-500 mt-2">Ya hay 3 superadmins. Elimina uno para crear otro.</p>}
             </div>
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
               <div className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">

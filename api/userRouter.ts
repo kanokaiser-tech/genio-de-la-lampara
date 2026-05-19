@@ -44,8 +44,8 @@ export const userRouter = createRouter({
       // Verificar que no haya mas de 2 superadmins
       const db = getDb();
       const [result] = await db.select({ count: count() }).from(users).where(eq(users.role, "superadmin"));
-      if (result.count >= 2) {
-        throw new Error("Maximo 2 superadmins permitidos");
+      if (result.count >= 3) {
+        throw new Error("Maximo 3 superadmins permitidos");
       }
       const { password, ...data } = input;
       const hashed = await hashPassword(password);
