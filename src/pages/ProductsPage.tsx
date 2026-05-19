@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Search, Plus, Package, Loader2, X, Menu, ChevronRight, ImageOff } from "lucide-react";
+import { ShoppingCart, Search, Plus, Package, Loader2, X, Menu, ChevronRight, ImageOff, Coins, Star, Zap } from "lucide-react";
 import { useNavigate } from "react-router";
 
 export default function ProductsPage() {
@@ -13,6 +13,10 @@ export default function ProductsPage() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const [search, setSearch] = useState("");
+  const [showPromo, setShowPromo] = useState(false);
+  const [bannerClosed, setBannerClosed] = useState(() => {
+    return localStorage.getItem("goldPromoBannerClosed") === "1";
+  });
   const [activeCategory, setActiveCategory] = useState<string>("Todas");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [qtys, setQtys] = useState<Record<number, number>>({});
@@ -97,12 +101,90 @@ export default function ProductsPage() {
   const handleQty = (id: number, d: number) => setQtys(prev => ({ ...prev, [id]: Math.max(1, (prev[id] ?? 1) + d) }));
   const handleAdd = (pid: number) => { addCart.mutate({ productId: pid, quantity: qtys[pid] ?? 1 }); setQtys(p => ({ ...p, [pid]: 1 })); };
 
+  // Modal promo: solo primera vez por sesion
+  useEffect(() => {
+    const dismissed = sessionStorage.getItem("goldPromoModal");
+    if (!dismissed) setShowPromo(true);
+  }, []);
+
   if (isLoading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-blue-600 animate-spin" /></div>;
   }
 
   return (
     <div className="max-w-6xl mx-auto">
+      {/* ===== MODAL PROMO MONEDAS DE ORO ===== */}
+      {showPromo && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="bg-yellow-500 p-6 text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Coins className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white">Monedas de Oro</h2>
+              <p className="text-yellow-100 text-sm mt-1">Compra y gana en cada pedido</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <p className="text-sm text-gray-700">
+                  Por cada compra que hagas, ganas monedas de oro que podes usar para <strong>descuentos</strong> en tus proximas compras.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
+                <Zap className="w-6 h-6 text-green-600 shrink-0" />
+                <div>
+                  <p className="font-bold text-green-800 text-sm">PAGA EN EFECTIVO Y SUMA DOBLE</p>
+                  <p className="text-xs text-green-600">1% en efectivo vs 0.5% en transferencia</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-center text-sm">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <p className="text-blue-700 font-bold text-lg">1%</p>
+                  <p className="text-blue-500 text-xs">Efectivo</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-gray-700 font-bold text-lg">0.5%</p>
+                  <p className="text-gray-500 text-xs">Transferencia</p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button onClick={() => { setShowPromo(false); sessionStorage.setItem("goldPromoModal", "1"); }} className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold">
+                  <Star className="w-4 h-4 mr-1" /> Entendido
+                </Button>
+                <Button variant="ghost" onClick={() => { setShowPromo(false); sessionStorage.setItem("goldPromoModal", "1"); }} className="text-gray-500">
+                  No mostrar mas
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== BANNER STICKY MONEDAS ===== */}
+      {!bannerClosed && (
+        <div className="bg-yellow-500 rounded-xl p-3 mb-4 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
+              <Coins className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-white font-bold text-sm flex items-center gap-2">
+                <Zap className="w-4 h-4" /> PAGA EN EFECTIVO Y SUMA DOBLE
+              </p>
+              <p className="text-yellow-100 text-xs">
+                Ganas el <strong>1%</strong> en efectivo o el <strong>0.5%</strong> por transferencia. Usalas para descuentos!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setBannerClosed(true); localStorage.setItem("goldPromoBannerClosed", "1"); }}
+            className="p-1 text-white/80 hover:text-white shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -182,6 +264,27 @@ export default function ProductsPage() {
                 </button>
               ))}
             </div>
+            {/* Info monedas de oro en sidebar */}
+            <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Coins className="w-3.5 h-3.5" /> Monedas de Oro
+              </p>
+              <p className="text-xs text-gray-600 mb-2">
+                Ganas monedas en cada compra y las usas como descuento.
+              </p>
+              <div className="bg-green-100 border border-green-200 rounded-lg p-2 mb-2">
+                <p className="text-xs font-bold text-green-800 flex items-center gap-1">
+                  <Zap className="w-3 h-3" /> Efectivo: 1%
+                </p>
+                <p className="text-xs text-green-600">Transferencia: 0.5%</p>
+              </div>
+              <button
+                onClick={() => setShowPromo(true)}
+                className="w-full text-xs text-yellow-600 hover:text-yellow-700 font-medium underline text-center"
+              >
+                Ver mas info
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -216,6 +319,19 @@ export default function ProductsPage() {
                     <span className={`text-xs shrink-0 ${activeCategory === cat ? "text-blue-500" : "text-gray-400"}`}>{catCount(cat)}</span>
                   </button>
                 ))}
+                {/* Info monedas mobile */}
+                <div className="mx-4 mt-4 mb-4 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5" /> Monedas de Oro
+                  </p>
+                  <p className="text-xs text-gray-600 mb-2">Ganas monedas en cada compra y las usas como descuento.</p>
+                  <div className="bg-green-100 border border-green-200 rounded-lg p-2 mb-2">
+                    <p className="text-xs font-bold text-green-800 flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Efectivo: 1%
+                    </p>
+                    <p className="text-xs text-green-600">Transferencia: 0.5%</p>
+                  </div>
+                </div>
               </div>
             </div>
           </>
