@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
-import { createRouter, userQuery, adminQuery } from "./middleware";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
+import { createRouter, userQuery, adminQuery, superadminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { orders, orderItems, users, products, settings } from "@db/schema";
 
@@ -268,4 +268,102 @@ export const orderRouter = createRouter({
       await db.delete(orders).where(eq(orders.id, input.id));
       return { success: true };
     }),
+
+  /* ================================================================
+     SUPERADMIN: Reporte de ventas por admin (aprobados/rechazados)
+     ================================================================ */
+  salesByAdmin: superadminQuery.query(async () => {
+    const db = getDb();
+
+    // Obtener todos los pedidos no pendientes
+    const allOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, "approved"),
+      ))
+      .orderBy(desc(orders.createdAt));
+
+    const rejectedOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, "rejected"),
+      ))
+      .orderBy(desc(orders.createdAt));
+
+    // Obtener todos los admins
+    const allAdmins = await db.select().from(users)
+      .where(eq(users.role, "admin"));
+
+    // Obtener items de todos los pedidos
+    const allItems = await db.select().from(orderItems);
+
+    // Helper: extraer fecha YYYY-MM-DD
+    const getDate = (d: Date | string) => {
+      const date = new Date(d);
+      return date.toISOString().split("T")[0];
+    };
+
+    // Agrupar aprobados por adminId + fecha
+    type DayKey = string; // "adminId:YYYY-MM-DD"
+    const dayData: Record<DayKey, {
+      adminId: number;
+      adminName: string;
+      date: string;
+      approvedCount: number;
+      approvedTotal: number;
+      rejectedCount: number;
+      rejectedTotal: number;
+    }> = {};
+
+    const adminById: Record<number, typeof allAdmins[0]> = {};
+    for (const a of allAdmins) adminById[a.id] = a;
+
+    // Procesar aprobados
+    for (const order of allOrders) {
+      const admin = adminById[order.adminId];
+      if (!admin) continue;
+      const date = getDate(order.createdAt);
+      const key: DayKey = `${order.adminId}:${date}`;
+      if (!dayData[key]) {
+        dayData[key] = {
+          adminId: order.adminId,
+          adminName: admin.name,
+          date,
+          approvedCount: 0,
+          approvedTotal: 0,
+          rejectedCount: 0,
+          rejectedTotal: 0,
+        };
+      }
+      dayData[key].approvedCount++;
+      dayData[key].approvedTotal += Number(order.totalAmount);
+    }
+
+    // Procesar rechazados
+    for (const order of rejectedOrders) {
+      const admin = adminById[order.adminId];
+      if (!admin) continue;
+      const date = getDate(order.createdAt);
+      const key: DayKey = `${order.adminId}:${date}`;
+      if (!dayData[key]) {
+        dayData[key] = {
+          adminId: order.adminId,
+          adminName: admin.name,
+          date,
+          approvedCount: 0,
+          approvedTotal: 0,
+          rejectedCount: 0,
+          rejectedTotal: 0,
+        };
+      }
+      dayData[key].rejectedCount++;
+      dayData[key].rejectedTotal += Number(order.totalAmount);
+    }
+
+    // Convertir a array y ordenar por fecha descendente, luego admin
+    const result = Object.values(dayData).sort((a, b) => {
+      if (b.date !== a.date) return b.date.localeCompare(a.date);
+      return a.adminName.localeCompare(b.adminName);
+    });
+
+    return result;
+  }),
 });

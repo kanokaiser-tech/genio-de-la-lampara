@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -36,6 +36,7 @@ export default function AdminPage() {
   const revs = allUsers?.filter(u => u.role === "revendedor") ?? [];
   const { data: orders, isLoading: lo } = trpc.order.myOrdersAsAdmin.useQuery();
   const { data: settings } = trpc.settings.get.useQuery();
+  const { data: salesByAdmin, isLoading: ls } = trpc.order.salesByAdmin.useQuery(undefined, { enabled: isSuperadmin });
 
   // Mutations
   const cProd = trpc.product.create.useMutation({ onSuccess: () => { utils.product.list.invalidate(); setNewProd({ name: "", category: "", priceList: "", stock: "0" }); } });
@@ -79,6 +80,7 @@ export default function AdminPage() {
     ...(isSuperadmin ? [{ value: "import", label: "Importar", icon: RefreshCw }] : []),
     ...(isSuperadmin ? [{ value: "settings", label: "Config", icon: Settings }] : []),
     ...(isSuperadmin ? [{ value: "superadmins", label: `SuperAdmins (${superadmins?.length ?? 0})`, icon: Shield }] : []),
+    ...(isSuperadmin ? [{ value: "sales", label: "Ventas", icon: TrendingUp }] : []),
   ];
 
   return (
@@ -436,6 +438,93 @@ export default function AdminPage() {
                   <Button variant="ghost" onClick={() => setChangePass(null)} className="text-gray-500">Cancelar</Button>
                 </div>
               </div>
+            )}
+          </TabsContent>
+        )}
+
+        {/* VENTAS — solo superadmin: reporte diario por admin */}
+        {isSuperadmin && (
+          <TabsContent value="sales" className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-6 h-6 text-blue-600" />
+              <h2 className="text-xl font-bold text-gray-900">Rendicion de Ventas por Admin</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Total diario de pedidos aprobados y rechazados por cada administrador.</p>
+
+            {ls ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (!salesByAdmin || salesByAdmin.length === 0) ? (
+              <div className="text-center py-16 text-gray-500 bg-white border border-gray-200 rounded-xl">
+                <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No hay ventas registradas aun</p>
+                <p className="text-xs text-gray-400 mt-1">Los pedidos aprobados y rechazados apareceran aqui</p>
+              </div>
+            ) : (
+              <>
+                {/* Totales generales */}
+                {(() => {
+                  const totalAprobado = salesByAdmin.reduce((s, d) => s + d.approvedTotal, 0);
+                  const totalRechazado = salesByAdmin.reduce((s, d) => s + d.rejectedTotal, 0);
+                  const totalAprobados = salesByAdmin.reduce((s, d) => s + d.approvedCount, 0);
+                  const totalRechazados = salesByAdmin.reduce((s, d) => s + d.rejectedCount, 0);
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold text-green-700">{formatPrice(totalAprobado)}</p>
+                        <p className="text-xs text-green-600 font-medium">Total Aprobado</p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold text-blue-700">{totalAprobados}</p>
+                        <p className="text-xs text-blue-600 font-medium">Pedidos Aprobados</p>
+                      </div>
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold text-red-700">{formatPrice(totalRechazado)}</p>
+                        <p className="text-xs text-red-600 font-medium">Total Rechazado</p>
+                      </div>
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold text-gray-700">{totalRechazados}</p>
+                        <p className="text-xs text-gray-600 font-medium">Pedidos Rechazados</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Tabla por admin y fecha */}
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  <div className="hidden md:grid grid-cols-[1fr,130px,100px,120px,100px,120px,140px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                    <span>Administrador</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Fecha</span>
+                    <span className="text-center">Aprobados</span>
+                    <span className="text-right">Total Aprobado</span>
+                    <span className="text-center">Rechazados</span>
+                    <span className="text-right">Total Rechazado</span>
+                    <span className="text-right">Rendicion</span>
+                  </div>
+                  {salesByAdmin.map((row, idx) => {
+                    const dateFmt = new Date(row.date + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+                    const isToday = row.date === new Date().toISOString().split("T")[0];
+                    return (
+                      <div key={idx} className={`grid grid-cols-1 md:grid-cols-[1fr,130px,100px,120px,100px,120px,140px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm ${isToday ? "bg-blue-50/50" : ""}`}>
+                        <span className="font-medium text-gray-900 flex items-center gap-2">
+                          <Users className="w-4 h-4 text-blue-600" /> {row.adminName}
+                        </span>
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {dateFmt}
+                          {isToday && <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-[10px] ml-1">Hoy</Badge>}
+                        </span>
+                        <span className="text-center">
+                          <Badge className="bg-green-100 text-green-700 border-green-300">{row.approvedCount}</Badge>
+                        </span>
+                        <span className="text-right font-semibold text-green-700">{formatPrice(row.approvedTotal)}</span>
+                        <span className="text-center">
+                          {row.rejectedCount > 0 ? <Badge className="bg-red-100 text-red-700 border-red-300">{row.rejectedCount}</Badge> : <span className="text-gray-400">-</span>}
+                        </span>
+                        <span className="text-right font-medium text-red-600">{row.rejectedTotal > 0 ? formatPrice(row.rejectedTotal) : <span className="text-gray-400">-</span>}</span>
+                        <span className="text-right font-bold text-blue-700">{formatPrice(row.approvedTotal)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </TabsContent>
         )}
