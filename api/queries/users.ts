@@ -29,7 +29,7 @@ export async function getAllUsers() {
   return getDb().select().from(users);
 }
 
-export async function getUsersByRole(role: "admin" | "revendedor") {
+export async function getUsersByRole(role: "superadmin" | "admin" | "revendedor") {
   return getDb().select().from(users).where(eq(users.role, role));
 }
 
@@ -39,6 +39,10 @@ export async function getRevendedoresByAdminId(adminId: number) {
 
 export async function getAdmins() {
   return getDb().select().from(users).where(eq(users.role, "admin"));
+}
+
+export async function getSuperadmins() {
+  return getDb().select().from(users).where(eq(users.role, "superadmin"));
 }
 
 export async function createUser(data: InsertUser) {

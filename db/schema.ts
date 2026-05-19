@@ -17,7 +17,7 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }).notNull().unique(),
   password: varchar("password", { length: 255 }).notNull(),
   phone: varchar("phone", { length: 50 }),
-  role: mysqlEnum("role", ["admin", "revendedor"]).default("revendedor").notNull(),
+  role: mysqlEnum("role", ["superadmin", "admin", "revendedor"]).default("revendedor").notNull(),
   parentId: bigint("parentId", { mode: "number", unsigned: true }),
   discountType: mysqlEnum("discountType", ["efectivo", "transferencia"]).default("efectivo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

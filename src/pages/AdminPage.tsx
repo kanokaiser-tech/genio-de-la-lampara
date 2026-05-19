@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
+import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield } from "lucide-react";
 
 export default function AdminPage() {
+  const { isSuperadmin } = useAuth();
   const utils = trpc.useUtils();
   const [tab, setTab] = useState("products");
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -16,6 +18,7 @@ export default function AdminPage() {
   const [newProd, setNewProd] = useState({ name: "", category: "", priceList: "", stock: "0" });
   const [newRev, setNewRev] = useState({ name: "", email: "", phone: "", password: "", discountType: "efectivo" as "efectivo" | "transferencia", parentId: "" });
   const [newAdmin, setNewAdmin] = useState({ name: "", email: "", phone: "", password: "" });
+  const [newSuperadmin, setNewSuperadmin] = useState({ name: "", email: "", phone: "", password: "" });
 
   // Edit form
   const [editing, setEditing] = useState<number | null>(null);
@@ -29,6 +32,7 @@ export default function AdminPage() {
   const { data: products, isLoading: lp } = trpc.product.list.useQuery();
   const { data: allUsers, isLoading: lr } = trpc.user.list.useQuery();
   const { data: admins } = trpc.user.listAdmins.useQuery();
+  const { data: superadmins } = trpc.user.byRole.useQuery({ role: "superadmin" }, { enabled: isSuperadmin });
   const revs = allUsers?.filter(u => u.role === "revendedor") ?? [];
   const { data: orders, isLoading: lo } = trpc.order.myOrdersAsAdmin.useQuery();
   const { data: settings } = trpc.settings.get.useQuery();
@@ -46,9 +50,16 @@ export default function AdminPage() {
     }
   });
   const cAdmin = trpc.user.createAdmin.useMutation({ onSuccess: () => { utils.user.listAdmins.invalidate(); setNewAdmin({ name: "", email: "", phone: "", password: "" }); } });
-  const dUser = trpc.user.delete.useMutation({ onSuccess: () => { utils.user.myRevendedores.invalidate(); utils.user.listAdmins.invalidate(); } });
+  const cSuperadmin = trpc.user.createSuperadmin.useMutation({
+    onSuccess: () => {
+      utils.user.byRole.invalidate();
+      utils.user.list.invalidate();
+      setNewSuperadmin({ name: "", email: "", phone: "", password: "" });
+    }
+  });
+  const dUser = trpc.user.delete.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); utils.user.byRole.invalidate(); } });
   const chPass = trpc.user.changePassword.useMutation({ onSuccess: () => { setChangePass(null); setNewPassword(""); } });
-  const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); setEditing(null); } });
+  const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); utils.user.byRole.invalidate(); setEditing(null); } });
   const upSet = trpc.settings.update.useMutation({ onSuccess: () => utils.settings.get.invalidate() });
   const sync = trpc.tiendanube.sync.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const test = trpc.tiendanube.test.useMutation();
@@ -59,51 +70,67 @@ export default function AdminPage() {
 
   const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "", parentId: user.parentId ? String(user.parentId) : "" }); };
 
+  // Tabs disponibles segun rol
+  const tabs = [
+    { value: "products", label: `Productos (${products?.length ?? 0})`, icon: Package },
+    { value: "revendedores", label: `Revendedores (${revs?.length ?? 0})`, icon: Users },
+    ...(isSuperadmin ? [{ value: "admins", label: `Admins (${admins?.length ?? 0})`, icon: Users }] : []),
+    { value: "orders", label: `Pedidos (${orders?.length ?? 0})`, icon: ClipboardList },
+    ...(isSuperadmin ? [{ value: "import", label: "Importar", icon: RefreshCw }] : []),
+    ...(isSuperadmin ? [{ value: "settings", label: "Config", icon: Settings }] : []),
+    ...(isSuperadmin ? [{ value: "superadmins", label: `SuperAdmins (${superadmins?.length ?? 0})`, icon: Shield }] : []),
+  ];
+
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Panel de Administracion</h1>
+      <div className="flex items-center gap-3 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Panel de Administracion</h1>
+        {isSuperadmin && <Badge className="bg-blue-100 text-blue-700 border-blue-300 font-bold">SUPERADMIN</Badge>}
+      </div>
+
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="bg-zinc-900 border border-zinc-800 mb-6 flex-wrap h-auto">
-          <TabsTrigger value="products" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black"><Package className="w-4 h-4 mr-1" /> Productos ({products?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="revendedores" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black"><Users className="w-4 h-4 mr-1" /> Revendedores ({revs?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="admins" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black"><Users className="w-4 h-4 mr-1" /> Admins ({admins?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="orders" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black"><ClipboardList className="w-4 h-4 mr-1" /> Pedidos ({orders?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="import" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black"><RefreshCw className="w-4 h-4 mr-1" /> Importar</TabsTrigger>
-          <TabsTrigger value="settings" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black"><Settings className="w-4 h-4 mr-1" /> Config</TabsTrigger>
+        <TabsList className="bg-white border border-gray-200 mb-6 flex-wrap h-auto">
+          {tabs.map(t => (
+            <TabsTrigger key={t.value} value={t.value} className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-600">
+              <t.icon className="w-4 h-4 mr-1" /> {t.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         {/* PRODUCTS */}
         <TabsContent value="products" className="space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">Nuevo producto</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <h3 className="font-semibold mb-3 text-gray-900">Nuevo producto</h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-              <Input placeholder="Nombre" value={newProd.name} onChange={e => setNewProd({ ...newProd, name: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Categoria" value={newProd.category} onChange={e => setNewProd({ ...newProd, category: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Precio lista" type="number" value={newProd.priceList} onChange={e => setNewProd({ ...newProd, priceList: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Stock" type="number" value={newProd.stock} onChange={e => setNewProd({ ...newProd, stock: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Button onClick={() => cProd.mutate({ name: newProd.name, category: newProd.category, priceList: Number(newProd.priceList), stock: Number(newProd.stock) })} disabled={!newProd.name || !newProd.category || !newProd.priceList} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Agregar</Button>
+              <Input placeholder="Nombre" value={newProd.name} onChange={e => setNewProd({ ...newProd, name: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+              <Input placeholder="Categoria" value={newProd.category} onChange={e => setNewProd({ ...newProd, category: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+              <Input placeholder="Precio lista" type="number" value={newProd.priceList} onChange={e => setNewProd({ ...newProd, priceList: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+              <Input placeholder="Stock" type="number" value={newProd.stock} onChange={e => setNewProd({ ...newProd, stock: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+              <Button onClick={() => cProd.mutate({ name: newProd.name, category: newProd.category, priceList: Number(newProd.priceList), stock: Number(newProd.stock) })} disabled={!newProd.name || !newProd.category || !newProd.priceList} className="bg-blue-600 hover:bg-blue-700 text-white"><Plus className="w-4 h-4 mr-1" /> Agregar</Button>
             </div>
           </div>
-          <div className="flex justify-between items-center"><p className="text-sm text-zinc-400">{products?.length ?? 0} productos</p><Button variant="outline" size="sm" onClick={() => clProd.mutate()} className="border-red-600 text-red-500"><Trash2 className="w-3 h-3 mr-1" /> Vaciar</Button></div>
-          {lp ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-yellow-500 animate-spin" /></div> : (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-              <div className="hidden md:grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase"><span>Nombre</span><span>Categoria</span><span className="text-center">Stock</span><span className="text-right">Lista</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Acciones</span></div>
+          <div className="flex justify-between items-center"><p className="text-sm text-gray-500">{products?.length ?? 0} productos</p><Button variant="outline" size="sm" onClick={() => clProd.mutate()} className="border-red-300 text-red-600 hover:bg-red-50"><Trash2 className="w-3 h-3 mr-1" /> Vaciar</Button></div>
+          {lp ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="hidden md:grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase">
+                <span>Nombre</span><span>Categoria</span><span className="text-center">Stock</span><span className="text-right">Lista</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Acciones</span>
+              </div>
               {products?.map(p => {
                 const stockNum = Number(p.stock ?? 0);
-                const stockColor = stockNum <= 0 ? "text-red-500" : stockNum <= 5 ? "text-orange-400" : stockNum <= 10 ? "text-yellow-400" : "text-green-400";
+                const stockColor = stockNum <= 0 ? "text-red-500" : stockNum <= 5 ? "text-orange-500" : stockNum <= 10 ? "text-amber-500" : "text-green-600";
                 return (
-                  <div key={p.id} className="grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
-                    <span className="truncate">{p.name}</span>
-                    <span className="text-zinc-400 text-sm">{p.category}</span>
+                  <div key={p.id} className="grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                    <span className="truncate text-gray-900">{p.name}</span>
+                    <span className="text-gray-500 text-sm">{p.category}</span>
                     <span className={`text-center font-bold ${stockColor}`}>{stockNum}</span>
-                    <span className="text-right text-zinc-400 line-through">{formatPrice(p.priceList)}</span>
-                    <span className="text-right text-yellow-500 font-medium">{formatPrice(p.priceCash30)}</span>
-                    <span className="text-right text-green-400">{formatPrice(p.priceTransfer25)}</span>
+                    <span className="text-right text-gray-400 line-through">{formatPrice(p.priceList)}</span>
+                    <span className="text-right text-blue-600 font-medium">{formatPrice(p.priceCash30)}</span>
+                    <span className="text-right text-green-600">{formatPrice(p.priceTransfer25)}</span>
                     <div className="flex justify-center gap-1">
                       {p.tiendanubeId && (
-                        <button onClick={() => { if (confirm('Eliminar de Tiendanube tambien?')) delTnProd.mutate({ productId: p.id }); }} className="text-zinc-600 hover:text-red-500" title="Eliminar de Tiendanube"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { if (confirm('Eliminar de Tiendanube tambien?')) delTnProd.mutate({ productId: p.id }); }} className="text-gray-400 hover:text-red-500" title="Eliminar de Tiendanube"><Trash2 className="w-3.5 h-3.5" /></button>
                       )}
-                      <button onClick={() => dProd.mutate({ id: p.id })} className="text-zinc-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => dProd.mutate({ id: p.id })} className="text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 );
@@ -114,176 +141,196 @@ export default function AdminPage() {
 
         {/* REVENDEDORES */}
         <TabsContent value="revendedores" className="space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">Nuevo revendedor</h3>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <h3 className="font-semibold mb-3 text-gray-900">Nuevo revendedor</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Nombre</label>
-                <Input placeholder="Nombre completo" value={newRev.name} onChange={e => setNewRev({ ...newRev, name: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+                <label className="text-xs text-gray-500 mb-1 block">Nombre</label>
+                <Input placeholder="Nombre completo" value={newRev.name} onChange={e => setNewRev({ ...newRev, name: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
               </div>
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Email</label>
-                <Input placeholder="Email" type="email" value={newRev.email} onChange={e => setNewRev({ ...newRev, email: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+                <label className="text-xs text-gray-500 mb-1 block">Email</label>
+                <Input placeholder="Email" type="email" value={newRev.email} onChange={e => setNewRev({ ...newRev, email: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
               </div>
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Telefono</label>
-                <Input placeholder="Telefono" value={newRev.phone} onChange={e => setNewRev({ ...newRev, phone: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+                <label className="text-xs text-gray-500 mb-1 block">Telefono</label>
+                <Input placeholder="Telefono" value={newRev.phone} onChange={e => setNewRev({ ...newRev, phone: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
               </div>
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Contrasena</label>
-                <Input placeholder="Contrasena" type="password" value={newRev.password} onChange={e => setNewRev({ ...newRev, password: e.target.value })} className="bg-zinc-800 border-zinc-700" />
+                <label className="text-xs text-gray-500 mb-1 block">Contrasena</label>
+                <Input placeholder="Contrasena" type="password" value={newRev.password} onChange={e => setNewRev({ ...newRev, password: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
               </div>
               <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Tipo de descuento</label>
-                <select value={newRev.discountType} onChange={e => setNewRev({ ...newRev, discountType: e.target.value as "efectivo" | "transferencia" })} className="w-full h-9 bg-zinc-800 border border-zinc-700 rounded-lg px-3 text-sm text-white">
+                <label className="text-xs text-gray-500 mb-1 block">Tipo de descuento</label>
+                <select value={newRev.discountType} onChange={e => setNewRev({ ...newRev, discountType: e.target.value as "efectivo" | "transferencia" })} className="w-full h-9 bg-gray-50 border border-gray-300 rounded-lg px-3 text-sm text-gray-900">
                   <option value="efectivo">Efectivo -30%</option>
                   <option value="transferencia">Transferencia -25%</option>
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs text-yellow-500 mb-1 block font-medium">Administrador asignado</label>
-                <select value={newRev.parentId} onChange={e => setNewRev({ ...newRev, parentId: e.target.value })} className="w-full h-9 bg-zinc-800 border border-yellow-500/40 rounded-lg px-3 text-sm text-white focus:ring-1 focus:ring-yellow-500">
+                <label className="text-xs text-blue-600 mb-1 block font-medium">Administrador asignado</label>
+                <select value={newRev.parentId} onChange={e => setNewRev({ ...newRev, parentId: e.target.value })} className="w-full h-9 bg-gray-50 border border-blue-300 rounded-lg px-3 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500">
                   <option value="">-- Seleccionar administrador --</option>
                   {admins?.map(a => <option key={a.id} value={a.id}>{a.name} ({a.email})</option>)}
                 </select>
-                {!newRev.parentId && <p className="text-xs text-zinc-600 mt-1">Si no seleccionas, se asigna a vos automaticamente.</p>}
+                {!newRev.parentId && <p className="text-xs text-gray-400 mt-1">Si no seleccionas, se asigna a vos automaticamente.</p>}
               </div>
               <div className="flex items-end">
-                <Button onClick={() => cRev.mutate({ ...newRev, parentId: newRev.parentId ? Number(newRev.parentId) : undefined })} disabled={!newRev.name || !newRev.email || !newRev.password} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Crear revendedor</Button>
+                <Button onClick={() => cRev.mutate({ ...newRev, parentId: newRev.parentId ? Number(newRev.parentId) : undefined })} disabled={!newRev.name || !newRev.email || !newRev.password} className="w-full bg-blue-600 hover:bg-blue-700 text-white"><Plus className="w-4 h-4 mr-1" /> Crear revendedor</Button>
               </div>
             </div>
           </div>
-          {lr ? <Loader2 className="w-6 h-6 text-yellow-500 animate-spin mx-auto" /> : (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-              <div className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase items-center"><span>Nombre</span><span>Email</span><span>Telefono</span><span>Desc.</span><span>Admin asignado</span><span></span><span></span><span></span></div>
+          {lr ? <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto" /> : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span>Nombre</span><span>Email</span><span>Telefono</span><span>Desc.</span><span>Admin asignado</span><span></span><span></span><span></span>
+              </div>
               {revs?.map(r => {
                 const assignedAdmin = admins?.find(a => a.id === r.parentId);
                 return (
-                  <div key={r.id} className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
+                  <div key={r.id} className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
                     {editing === r.id ? (
                       <>
                         <div className="flex flex-col gap-0.5">
-                          <label className="text-[10px] text-zinc-500">Nombre</label>
-                          <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                          <label className="text-[10px] text-gray-500">Nombre</label>
+                          <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
                         </div>
                         <div className="flex flex-col gap-0.5">
-                          <label className="text-[10px] text-zinc-500">Email</label>
-                          <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                          <label className="text-[10px] text-gray-500">Email</label>
+                          <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
                         </div>
                         <div className="flex flex-col gap-0.5">
-                          <label className="text-[10px] text-zinc-500">Telefono</label>
-                          <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
+                          <label className="text-[10px] text-gray-500">Telefono</label>
+                          <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
                         </div>
                         <div />
                         <div className="flex flex-col gap-0.5">
-                          <label className="text-[10px] text-yellow-500 font-medium">Cambiar admin</label>
-                          <select value={editForm.parentId} onChange={e => setEditForm({ ...editForm, parentId: e.target.value })} className="bg-zinc-800 border border-yellow-500/40 rounded-lg px-2 text-sm text-white h-8 w-full focus:ring-1 focus:ring-yellow-500">
+                          <label className="text-[10px] text-blue-600 font-medium">Cambiar admin</label>
+                          <select value={editForm.parentId} onChange={e => setEditForm({ ...editForm, parentId: e.target.value })} className="bg-gray-50 border border-blue-300 rounded-lg px-2 text-sm text-gray-900 h-8 w-full focus:ring-1 focus:ring-blue-500">
                             {admins?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                           </select>
                         </div>
                         <div className="flex gap-1 pt-4">
-                          <Button size="sm" onClick={() => upUser.mutate({ id: r.id, name: editForm.name, email: editForm.email, phone: editForm.phone, parentId: editForm.parentId ? Number(editForm.parentId) : null })} className="bg-green-600 hover:bg-green-700 h-8 px-2" title="Guardar"><Check className="w-3 h-3" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2" title="Cancelar"><X className="w-3 h-3" /></Button>
+                          <Button size="sm" onClick={() => upUser.mutate({ id: r.id, name: editForm.name, email: editForm.email, phone: editForm.phone, parentId: editForm.parentId ? Number(editForm.parentId) : null })} className="bg-green-600 hover:bg-green-700 h-8 px-2" title="Guardar"><Check className="w-3 h-3 text-white" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2 text-gray-500"><X className="w-3 h-3" /></Button>
                         </div>
                         <div />
                       </>
                     ) : (
                       <>
-                        <span className="truncate">{r.name}</span>
-                        <span className="text-zinc-400 truncate">{r.email}</span>
-                        <span className="text-zinc-400">{r.phone || "-"}</span>
-                        <Badge variant="outline" className="text-yellow-500 border-yellow-500/30 w-fit text-xs">{r.discountType === "efectivo" ? "30%" : "25%"}</Badge>
-                        <span className="text-zinc-300 text-xs truncate" title={assignedAdmin?.email}>{assignedAdmin?.name || <span className="text-zinc-600">Sin asignar</span>}</span>
-                        <button onClick={() => startEdit(r)} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => setChangePass({ id: r.id, name: r.name })} className="text-zinc-500 hover:text-yellow-400 flex justify-center"><Lock className="w-4 h-4" /></button>
-                        <button onClick={() => dUser.mutate({ id: r.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                        <span className="truncate text-gray-900">{r.name}</span>
+                        <span className="text-gray-500 truncate">{r.email}</span>
+                        <span className="text-gray-500">{r.phone || "-"}</span>
+                        <Badge variant="outline" className="text-blue-600 border-blue-300 w-fit text-xs">{r.discountType === "efectivo" ? "30%" : "25%"}</Badge>
+                        <span className="text-gray-600 text-xs truncate" title={assignedAdmin?.email}>{assignedAdmin?.name || <span className="text-gray-400">Sin asignar</span>}</span>
+                        <button onClick={() => startEdit(r)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => setChangePass({ id: r.id, name: r.name })} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
+                        <button onClick={() => dUser.mutate({ id: r.id })} className="text-gray-400 hover:text-red-500 flex justify-center"><Trash2 className="w-4 h-4" /></button>
                       </>
                     )}
                   </div>
                 );
               })}
-              {(!revs || revs.length === 0) && <div className="text-center py-8 text-zinc-500 text-sm">No hay revendedores</div>}
+              {(!revs || revs.length === 0) && <div className="text-center py-8 text-gray-500 text-sm">No hay revendedores</div>}
             </div>
           )}
           {changePass && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-              <h4 className="font-medium mb-2">Cambiar contrasena de {changePass.name}</h4>
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <h4 className="font-medium mb-2 text-gray-900">Cambiar contrasena de {changePass.name}</h4>
               <div className="flex gap-2">
-                <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-zinc-800 border-zinc-700 max-w-xs" />
-                <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
-                <Button variant="ghost" onClick={() => setChangePass(null)}>Cancelar</Button>
+                <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-gray-50 border-gray-300 max-w-xs text-gray-900" />
+                <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-blue-600 hover:bg-blue-700 text-white"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
+                <Button variant="ghost" onClick={() => setChangePass(null)} className="text-gray-500">Cancelar</Button>
               </div>
             </div>
           )}
         </TabsContent>
 
-        {/* ADMINS */}
-        <TabsContent value="admins" className="space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <h3 className="font-semibold mb-3">Nuevo admin</h3>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-              <Input placeholder="Nombre" value={newAdmin.name} onChange={e => setNewAdmin({ ...newAdmin, name: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Email" type="email" value={newAdmin.email} onChange={e => setNewAdmin({ ...newAdmin, email: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Telefono (WhatsApp)" value={newAdmin.phone} onChange={e => setNewAdmin({ ...newAdmin, phone: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Input placeholder="Contrasena" type="password" value={newAdmin.password} onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })} className="bg-zinc-800 border-zinc-700" />
-              <Button onClick={() => cAdmin.mutate(newAdmin)} disabled={!newAdmin.name || !newAdmin.email || !newAdmin.password} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Plus className="w-4 h-4 mr-1" /> Crear</Button>
-            </div>
-          </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            <div className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 bg-zinc-800/50 text-xs font-medium text-zinc-400 uppercase items-center"><span>Nombre</span><span>Email</span><span>Telefono</span><span></span><span></span><span></span></div>
-            {admins?.map(a => (
-              <div key={a.id} className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 border-t border-zinc-800/50 items-center text-sm">
-                {editing === a.id ? (
-                  <>
-                    <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                    <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                    <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-zinc-800 border-zinc-700 h-8 text-sm" />
-                    <Button size="sm" onClick={() => upUser.mutate({ id: a.id, name: editForm.name, email: editForm.email, phone: editForm.phone })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2"><X className="w-3 h-3" /></Button>
-                    <div />
-                  </>
-                ) : (
-                  <>
-                    <span className="font-medium">{a.name}</span><span className="text-zinc-400">{a.email}</span><span className="text-zinc-400">{a.phone || "-"}</span>
-                    <button onClick={() => startEdit(a)} className="text-zinc-500 hover:text-blue-400 flex justify-center"><Pencil className="w-4 h-4" /></button>
-                    <button onClick={() => setChangePass({ id: a.id, name: a.name })} className="text-zinc-500 hover:text-yellow-400 flex justify-center"><Lock className="w-4 h-4" /></button>
-                    <button onClick={() => dUser.mutate({ id: a.id })} className="text-zinc-500 hover:text-red-400 flex justify-center"><Trash2 className="w-4 h-4" /></button>
-                  </>
-                )}
-              </div>
-            ))}
-            {(!admins || admins.length === 0) && <div className="text-center py-8 text-zinc-500 text-sm">No hay otros admins</div>}
-          </div>
-          {changePass && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-              <h4 className="font-medium mb-2">Cambiar contrasena de {changePass.name}</h4>
-              <div className="flex gap-2">
-                <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-zinc-800 border-zinc-700 max-w-xs" />
-                <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
-                <Button variant="ghost" onClick={() => setChangePass(null)}>Cancelar</Button>
+        {/* ADMINS — solo superadmin */}
+        {isSuperadmin && (
+          <TabsContent value="admins" className="space-y-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <h3 className="font-semibold mb-3 text-gray-900">Nuevo admin</h3>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                <Input placeholder="Nombre" value={newAdmin.name} onChange={e => setNewAdmin({ ...newAdmin, name: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Input placeholder="Email" type="email" value={newAdmin.email} onChange={e => setNewAdmin({ ...newAdmin, email: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Input placeholder="Telefono (WhatsApp)" value={newAdmin.phone} onChange={e => setNewAdmin({ ...newAdmin, phone: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Input placeholder="Contrasena" type="password" value={newAdmin.password} onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Button onClick={() => cAdmin.mutate(newAdmin)} disabled={!newAdmin.name || !newAdmin.email || !newAdmin.password} className="bg-blue-600 hover:bg-blue-700 text-white"><Plus className="w-4 h-4 mr-1" /> Crear</Button>
               </div>
             </div>
-          )}
-        </TabsContent>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span>Nombre</span><span>Email</span><span>Telefono</span><span></span><span></span><span></span>
+              </div>
+              {admins?.map(a => (
+                <div key={a.id} className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                  {editing === a.id ? (
+                    <>
+                      <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
+                      <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
+                      <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
+                      <Button size="sm" onClick={() => upUser.mutate({ id: a.id, name: editForm.name, email: editForm.email, phone: editForm.phone })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3 text-white" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2 text-gray-500"><X className="w-3 h-3" /></Button>
+                      <div />
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-medium text-gray-900">{a.name}</span>
+                      <span className="text-gray-500">{a.email}</span>
+                      <span className="text-gray-500">{a.phone || "-"}</span>
+                      <button onClick={() => startEdit(a)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => setChangePass({ id: a.id, name: a.name })} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
+                      <button onClick={() => dUser.mutate({ id: a.id })} className="text-gray-400 hover:text-red-500 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {(!admins || admins.length === 0) && <div className="text-center py-8 text-gray-500 text-sm">No hay otros admins</div>}
+            </div>
+            {changePass && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <h4 className="font-medium mb-2 text-gray-900">Cambiar contrasena de {changePass.name}</h4>
+                <div className="flex gap-2">
+                  <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-gray-50 border-gray-300 max-w-xs text-gray-900" />
+                  <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-blue-600 hover:bg-blue-700 text-white"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
+                  <Button variant="ghost" onClick={() => setChangePass(null)} className="text-gray-500">Cancelar</Button>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        )}
 
         {/* ORDERS */}
         <TabsContent value="orders" className="space-y-3">
-          {lo ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-yellow-500 animate-spin" /></div> : orders?.length === 0 ? <div className="text-center py-20 text-zinc-500"><ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No hay pedidos</p></div> : (
+          {lo ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : orders?.length === 0 ? <div className="text-center py-20 text-gray-500"><ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No hay pedidos</p></div> : (
             orders?.map(o => {
               const isExp = expanded === o.id;
               return (
-                <div key={o.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                  <button onClick={() => setExpanded(isExp ? null : o.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-zinc-800/50">
+                <div key={o.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  <button onClick={() => setExpanded(isExp ? null : o.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
                     <div className="flex items-center gap-4">
-                      <Badge className={o.status === "pending" ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/30" : o.status === "approved" ? "bg-green-500/10 text-green-500 border-green-500/30" : "bg-red-500/10 text-red-500 border-red-500/30"}>{o.status === "pending" ? "Pendiente" : o.status === "approved" ? "Aprobado" : "Rechazado"}</Badge>
-                      <div className="text-left"><p className="font-medium text-sm">Pedido #{o.id}</p><p className="text-xs text-zinc-400">{fmt(o.createdAt)} - {o.paymentType}</p></div>
+                      <Badge className={o.status === "pending" ? "bg-amber-100 text-amber-700 border-amber-300" : o.status === "approved" ? "bg-green-100 text-green-700 border-green-300" : "bg-red-100 text-red-700 border-red-300"}>
+                        {o.status === "pending" ? "Pendiente" : o.status === "approved" ? "Aprobado" : "Rechazado"}
+                      </Badge>
+                      <div className="text-left">
+                        <p className="font-medium text-sm text-gray-900">Pedido #{o.id}</p>
+                        <p className="text-xs text-gray-500">{fmt(o.createdAt)} - {o.paymentType}</p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4"><span className="font-bold text-yellow-500">{formatPrice(o.totalAmount)}</span></div>
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-blue-600">{formatPrice(o.totalAmount)}</span>
+                    </div>
                   </button>
                   {isExp && (
-                    <div className="px-4 pb-4 border-t border-zinc-800 pt-3">
-                      {o.notes && <p className="text-sm text-zinc-400 mb-2 bg-zinc-800/50 p-2 rounded">Notas: {o.notes}</p>}
-                      {o.status === "pending" && <div className="flex gap-2"><Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700">Aprobar</Button><Button size="sm" variant="outline" onClick={() => rej.mutate({ id: o.id })} className="border-red-600 text-red-500">Rechazar</Button></div>}
+                    <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+                      {o.notes && <p className="text-sm text-gray-500 mb-2 bg-gray-50 p-2 rounded">Notas: {o.notes}</p>}
+                      {o.status === "pending" && (
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700 text-white">Aprobar</Button>
+                          <Button size="sm" variant="outline" onClick={() => rej.mutate({ id: o.id })} className="border-red-300 text-red-600 hover:bg-red-50">Rechazar</Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -292,35 +339,112 @@ export default function AdminPage() {
           )}
         </TabsContent>
 
-        {/* IMPORT */}
-        <TabsContent value="import" className="space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-            <h3 className="font-semibold text-lg mb-2">Sincronizacion con Tiendanube</h3>
-            <p className="text-zinc-400 text-sm mb-4">Importa todos los productos de tu tienda Tiendanube. Los que no esten en Tiendanube se eliminan.</p>
-            <div className="flex gap-3">
-              <Button onClick={() => sync.mutate()} disabled={sync.isPending} className="bg-yellow-500 hover:bg-yellow-600 text-black">{sync.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />} Sincronizar</Button>
-              <Button onClick={() => test.mutate()} variant="outline" className="border-zinc-700">Probar conexion</Button>
+        {/* IMPORT — solo superadmin */}
+        {isSuperadmin && (
+          <TabsContent value="import" className="space-y-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <h3 className="font-semibold text-lg mb-2 text-gray-900">Sincronizacion con Tiendanube</h3>
+              <p className="text-gray-500 text-sm mb-4">Importa todos los productos de tu tienda Tiendanube. Los que no esten en Tiendanube se eliminan.</p>
+              <div className="flex gap-3">
+                <Button onClick={() => sync.mutate()} disabled={sync.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  {sync.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />} Sincronizar
+                </Button>
+                <Button onClick={() => test.mutate()} variant="outline" className="border-gray-300 text-gray-700">Probar conexion</Button>
+              </div>
+              {sync.isSuccess && <p className="text-green-600 text-sm mt-3">{sync.data.imported} productos importados{sync.data.deleted ? `, ${sync.data.deleted} eliminados` : ""}</p>}
+              {sync.isError && <p className="text-red-600 text-sm mt-3">Error: {sync.error.message}</p>}
             </div>
-            {sync.isSuccess && <p className="text-green-400 text-sm mt-3">{sync.data.imported} productos importados{sync.data.deleted ? `, ${sync.data.deleted} eliminados` : ""}</p>}
-            {sync.isError && <p className="text-red-400 text-sm mt-3">Error: {sync.error.message}</p>}
-          </div>
-        </TabsContent>
+          </TabsContent>
+        )}
 
-        {/* SETTINGS */}
-        <TabsContent value="settings" className="space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-            <h3 className="font-semibold text-lg mb-4">Configuracion</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(["storeName", "whatsappNumber", "tiendanubeApiToken", "tiendanubeStoreId", "webhookUrl"] as const).map(k => (
-                <div key={k} className={k === "webhookUrl" ? "md:col-span-2" : ""}>
-                  <label className="text-sm text-zinc-400 mb-1 block capitalize">{k === "storeName" ? "Nombre de la tienda" : k === "whatsappNumber" ? "WhatsApp" : k === "tiendanubeApiToken" ? "API Token Tiendanube" : k === "tiendanubeStoreId" ? "Store ID Tiendanube" : "Webhook URL (n8n)"}</label>
-                  <Input defaultValue={(settings as any)?.[k] ?? ""} onChange={e => { const el = e.target; el.dataset.value = e.target.value; }} className="bg-zinc-800 border-zinc-700 setting-input" data-key={k} />
+        {/* SETTINGS — solo superadmin */}
+        {isSuperadmin && (
+          <TabsContent value="settings" className="space-y-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <h3 className="font-semibold text-lg mb-4 text-gray-900">Configuracion</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(["storeName", "whatsappNumber", "tiendanubeApiToken", "tiendanubeStoreId", "webhookUrl"] as const).map(k => (
+                  <div key={k} className={k === "webhookUrl" ? "md:col-span-2" : ""}>
+                    <label className="text-sm text-gray-500 mb-1 block capitalize">
+                      {k === "storeName" ? "Nombre de la tienda" : k === "whatsappNumber" ? "WhatsApp" : k === "tiendanubeApiToken" ? "API Token Tiendanube" : k === "tiendanubeStoreId" ? "Store ID Tiendanube" : "Webhook URL (n8n)"}
+                    </label>
+                    <Input defaultValue={(settings as any)?.[k] ?? ""} onChange={e => { const el = e.target; el.dataset.value = e.target.value; }} className="bg-gray-50 border-gray-300 text-gray-900 setting-input" data-key={k} />
+                  </div>
+                ))}
+              </div>
+              <Button onClick={() => { const vals: Record<string, string> = {}; document.querySelectorAll(".setting-input").forEach(i => { const el = i as HTMLInputElement; if (el.dataset.value) vals[el.dataset.key!] = el.dataset.value; }); upSet.mutate(vals); }} disabled={upSet.isPending} className="mt-4 bg-blue-600 hover:bg-blue-700 text-white">
+                {upSet.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />} Guardar
+              </Button>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* SUPERADMINS — solo superadmin */}
+        {isSuperadmin && (
+          <TabsContent value="superadmins" className="space-y-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <h3 className="font-semibold mb-3 text-gray-900 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-blue-600" /> Nuevo SuperAdmin
+              </h3>
+              <p className="text-xs text-gray-500 mb-3">Maximo 2 superadmins permitidos. Actualmente: {superadmins?.length ?? 0}/2</p>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                <Input placeholder="Nombre" value={newSuperadmin.name} onChange={e => setNewSuperadmin({ ...newSuperadmin, name: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Input placeholder="Email" type="email" value={newSuperadmin.email} onChange={e => setNewSuperadmin({ ...newSuperadmin, email: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Input placeholder="Telefono" value={newSuperadmin.phone} onChange={e => setNewSuperadmin({ ...newSuperadmin, phone: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Input placeholder="Contrasena" type="password" value={newSuperadmin.password} onChange={e => setNewSuperadmin({ ...newSuperadmin, password: e.target.value })} className="bg-gray-50 border-gray-300 text-gray-900" />
+                <Button
+                  onClick={() => cSuperadmin.mutate(newSuperadmin)}
+                  disabled={!newSuperadmin.name || !newSuperadmin.email || !newSuperadmin.password || (superadmins?.length ?? 0) >= 2}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Crear SuperAdmin
+                </Button>
+              </div>
+              {(superadmins?.length ?? 0) >= 2 && <p className="text-xs text-red-500 mt-2">Ya hay 2 superadmins. Elimina uno para crear otro.</p>}
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span>Nombre</span><span>Email</span><span>Telefono</span><span></span><span></span><span></span>
+              </div>
+              {superadmins?.map(a => (
+                <div key={a.id} className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                  {editing === a.id ? (
+                    <>
+                      <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
+                      <Input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
+                      <Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="bg-gray-50 border-gray-300 h-8 text-sm text-gray-900" />
+                      <Button size="sm" onClick={() => upUser.mutate({ id: a.id, name: editForm.name, email: editForm.email, phone: editForm.phone })} className="bg-green-600 hover:bg-green-700 h-8 px-2"><Check className="w-3 h-3 text-white" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-8 px-2 text-gray-500"><X className="w-3 h-3" /></Button>
+                      <div />
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-medium text-gray-900 flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-blue-600" /> {a.name}
+                      </span>
+                      <span className="text-gray-500">{a.email}</span>
+                      <span className="text-gray-500">{a.phone || "-"}</span>
+                      <button onClick={() => startEdit(a)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => setChangePass({ id: a.id, name: a.name })} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
+                      <button onClick={() => { if (confirm('Eliminar este superadmin?')) dUser.mutate({ id: a.id }); }} className="text-gray-400 hover:text-red-500 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                    </>
+                  )}
                 </div>
               ))}
+              {(!superadmins || superadmins.length === 0) && <div className="text-center py-8 text-gray-500 text-sm">No hay superadmins</div>}
             </div>
-            <Button onClick={() => { const vals: Record<string, string> = {}; document.querySelectorAll(".setting-input").forEach(i => { const el = i as HTMLInputElement; if (el.dataset.value) vals[el.dataset.key!] = el.dataset.value; }); upSet.mutate(vals); }} disabled={upSet.isPending} className="mt-4 bg-yellow-500 hover:bg-yellow-600 text-black">{upSet.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />} Guardar</Button>
-          </div>
-        </TabsContent>
+            {changePass && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <h4 className="font-medium mb-2 text-gray-900">Cambiar contrasena de {changePass.name}</h4>
+                <div className="flex gap-2">
+                  <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-gray-50 border-gray-300 max-w-xs text-gray-900" />
+                  <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-blue-600 hover:bg-blue-700 text-white"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
+                  <Button variant="ghost" onClick={() => setChangePass(null)} className="text-gray-500">Cancelar</Button>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -79,9 +79,11 @@ export const orderRouter = createRouter({
 
   /* ================================================================
      ADMIN: Listar pedidos de mis revendedores CON datos del revendedor
+     Superadmin ve TODOS los pedidos
      ================================================================ */
   myOrdersAsAdmin: adminQuery.query(async ({ ctx }) => {
     const db = getDb();
+    const isSuper = ctx.user.role === "superadmin";
 
     // Obtener TODOS los pedidos primero
     const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
@@ -89,12 +91,18 @@ export const orderRouter = createRouter({
     // Obtener datos de los revendedores
     const revUsers = await db.select().from(users).where(eq(users.role, "revendedor"));
 
-    // Filtrar solo los que pertenecen a este admin
-    const myRevIds = new Set(
-      revUsers.filter(u => u.parentId === ctx.user.id).map(u => u.id)
-    );
+    let myOrders;
+    if (isSuper) {
+      // Superadmin ve todos los pedidos
+      myOrders = allOrders;
+    } else {
+      // Admin normal solo ve los de sus revendedores
+      const myRevIds = new Set(
+        revUsers.filter(u => u.parentId === ctx.user.id).map(u => u.id)
+      );
+      myOrders = allOrders.filter(o => myRevIds.has(o.userId));
+    }
 
-    const myOrders = allOrders.filter(o => myRevIds.has(o.userId));
     if (myOrders.length === 0) return [];
 
     // Obtener items de cada pedido
