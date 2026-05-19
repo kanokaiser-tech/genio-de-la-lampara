@@ -36,6 +36,9 @@ export default function AdminPage() {
   const [changePassUser, setChangePassUser] = useState<{ id: number; name: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
 
+  // Asignar monedas de oro
+  const [coinAssign, setCoinAssign] = useState({ userId: "", amount: "", description: "" });
+
   // Data
   const { data: products, isLoading: lp } = trpc.product.list.useQuery();
   const { data: allUsers, isLoading: lr } = trpc.user.list.useQuery();
@@ -84,6 +87,12 @@ export default function AdminPage() {
   const { data: coinStats } = trpc.goldCoins.stats.useQuery(undefined, { enabled: isSuperadmin });
   const expireCoins = trpc.goldCoins.expireMonthly.useMutation({
     onSuccess: () => utils.goldCoins.stats.invalidate(),
+  });
+  const adminAddCoins = trpc.goldCoins.adminAddCoins.useMutation({
+    onSuccess: () => {
+      utils.goldCoins.stats.invalidate();
+      setCoinAssign({ userId: "", amount: "", description: "" });
+    },
   });
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -571,6 +580,54 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                 <p className="text-2xl font-bold text-red-700">{coinStats?.spentThisMonth ?? 0}</p>
                 <p className="text-xs text-red-600 font-medium">Usadas este mes</p>
               </div>
+            </div>
+
+            {/* Asignar monedas manualmente */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Coins className="w-4 h-4 text-yellow-500" /> Asignar monedas manualmente
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <select
+                  value={coinAssign.userId}
+                  onChange={e => setCoinAssign({ ...coinAssign, userId: e.target.value })}
+                  className="w-full h-9 bg-gray-50 border border-gray-300 rounded-lg px-3 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">-- Seleccionar revendedor --</option>
+                  {revs?.map(r => <option key={r.id} value={r.id}>{r.name} ({r.email}) - {r.goldCoins ?? 0} monedas</option>)}
+                  {admins?.map(a => <option key={a.id} value={a.id}>{a.name} ({a.email}) - {a.goldCoins ?? 0} monedas</option>)}
+                </select>
+                <Input
+                  placeholder="Cantidad de monedas"
+                  type="number"
+                  value={coinAssign.amount}
+                  onChange={e => setCoinAssign({ ...coinAssign, amount: e.target.value })}
+                  className="bg-gray-50 border-gray-300 text-gray-900"
+                />
+                <Input
+                  placeholder="Descripcion (opcional)"
+                  value={coinAssign.description}
+                  onChange={e => setCoinAssign({ ...coinAssign, description: e.target.value })}
+                  className="bg-gray-50 border-gray-300 text-gray-900"
+                />
+                <Button
+                  onClick={() => {
+                    if (!coinAssign.userId || !coinAssign.amount) return;
+                    adminAddCoins.mutate({
+                      userId: Number(coinAssign.userId),
+                      amount: Number(coinAssign.amount),
+                      description: coinAssign.description || undefined,
+                    });
+                  }}
+                  disabled={!coinAssign.userId || !coinAssign.amount || adminAddCoins.isPending}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-white"
+                >
+                  {adminAddCoins.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Coins className="w-4 h-4 mr-1" /> Asignar monedas</>}
+                </Button>
+              </div>
+              {adminAddCoins.isSuccess && (
+                <p className="text-green-600 text-xs mt-2">{adminAddCoins.data.assigned} monedas asignadas a {adminAddCoins.data.userName}</p>
+              )}
             </div>
 
             {/* Vencer monedas */}

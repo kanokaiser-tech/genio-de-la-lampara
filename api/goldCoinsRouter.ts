@@ -241,4 +241,38 @@ export const goldCoinsRouter = createRouter({
       topUsers,
     };
   }),
+
+  /* ================================================================
+     ASIGNAR MONEDAS MANUALMENTE (superadmin)
+     ================================================================ */
+  adminAddCoins: superadminQuery
+    .input(z.object({
+      userId: z.number().int().positive(),
+      amount: z.number().int().positive(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const monthKey = getCurrentMonthKey();
+
+      // Verificar que el usuario existe
+      const [targetUser] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, input.userId));
+      if (!targetUser) throw new Error("Usuario no encontrado");
+
+      // Crear transacción
+      await db.insert(goldCoinTransactions).values({
+        userId: input.userId,
+        type: "earned",
+        amount: input.amount,
+        description: input.description || `Asignadas manualmente por admin`,
+        monthKey,
+      });
+
+      // Sumar al saldo
+      await db.execute(
+        sql`UPDATE users SET goldCoins = goldCoins + ${input.amount} WHERE id = ${input.userId}`
+      );
+
+      return { success: true, assigned: input.amount, userName: targetUser.name };
+    }),
 });
