@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   ShoppingCart, ArrowLeft, FileText, Loader2, Download,
-  MessageCircle, User, Zap,
+  MessageCircle, User, Zap, Coins,
 } from "lucide-react";
 import { Link } from "react-router";
 import jsPDF from "jspdf";
@@ -47,6 +47,7 @@ export default function CartPage() {
   );
   const [notes, setNotes] = useState("");
   const [expressShipping, setExpressShipping] = useState(false);
+  const [goldCoinsUsed, setGoldCoinsUsed] = useState(0);
   const [pdfGenerated, setPdfGenerated] = useState(false);
   const [orderMeta, setOrderMeta] = useState({ total: 0, totalList: 0, totalProfit: 0 });
   const orderItemsRef = useRef<OrderItemPDF[]>([]);
@@ -62,6 +63,9 @@ export default function CartPage() {
   /* query: admin asignado */
   const { data: myAdmin } = trpc.user.myAdmin.useQuery(undefined, { enabled: pdfGenerated });
 
+  /* query: monedas de oro */
+  const { data: coinBalance } = trpc.goldCoins.getBalance.useQuery();
+
   /* helpers de precios */
   const priceField: "products.priceCash30" | "products.priceTransfer25" =
     paymentType === "efectivo" ? "products.priceCash30" : "products.priceTransfer25";
@@ -72,7 +76,8 @@ export default function CartPage() {
   const totalList = items.reduce((s, i) => s + Number(i.product.priceList) * i.quantity, 0);
   const totalProfit = totalList - subtotal;
   const shippingCost = expressShipping ? EXPRESS_SHIPPING : 0;
-  const total = subtotal + shippingCost;
+  const coinDiscount = goldCoinsUsed * 0.01;
+  const total = Math.max(0, subtotal + shippingCost - coinDiscount);
 
   /* ---------------------------------------------------------------- */
   /*  PDF generator                                                     */
@@ -179,7 +184,7 @@ export default function CartPage() {
     setOrderMeta(meta);
 
     createOrder.mutate(
-      { paymentType, notes: notes || undefined },
+      { paymentType, notes: notes || undefined, goldCoinsUsed },
       {
         onSuccess: () => {
           setTimeout(() => { generatePDF(orderItems, meta, expressShipping); setPdfGenerated(true); }, 300);
@@ -399,6 +404,32 @@ export default function CartPage() {
             <Switch checked={expressShipping} onCheckedChange={setExpressShipping} />
           </div>
 
+          {/* Monedas de oro */}
+          {coinBalance && coinBalance.balance > 0 && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Coins className="w-4 h-4 text-yellow-600" />
+                <p className="text-sm font-medium text-gray-900">Monedas de oro</p>
+                <span className="text-xs text-yellow-600 font-bold ml-auto">{coinBalance.balance} disponibles</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.min(coinBalance.balance, Math.floor((subtotal + shippingCost) / 0.01))}
+                  step={1}
+                  value={goldCoinsUsed}
+                  onChange={e => setGoldCoinsUsed(Number(e.target.value))}
+                  className="flex-1 accent-yellow-500"
+                />
+                <span className="text-xs font-bold text-yellow-700 w-14 text-right">{goldCoinsUsed}</span>
+              </div>
+              {goldCoinsUsed > 0 && (
+                <p className="text-xs text-yellow-600 mt-1">Descuento: {formatPrice(coinDiscount)}</p>
+              )}
+            </div>
+          )}
+
           {/* Summary */}
           <div className="space-y-2 text-sm mb-4">
             <div className="flex justify-between text-gray-500"><span>Precio lista</span><span className="line-through">{formatPrice(totalList)}</span></div>
@@ -406,6 +437,12 @@ export default function CartPage() {
             <div className="flex justify-between text-gray-900 font-medium"><span>Subtotal</span><span>{formatPrice(subtotal)}</span></div>
             {expressShipping && (
               <div className="flex justify-between text-blue-600 font-medium"><span>Envio Express</span><span>{formatPrice(EXPRESS_SHIPPING)}</span></div>
+            )}
+            {goldCoinsUsed > 0 && (
+              <div className="flex justify-between text-yellow-600 font-medium">
+                <span>Monedas de oro ({goldCoinsUsed})</span>
+                <span>-{formatPrice(coinDiscount)}</span>
+              </div>
             )}
             <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-lg">
               <span className="text-gray-900">Total</span>

@@ -5,6 +5,7 @@ import { orderRouter } from "./orderRouter";
 import { cartRouter } from "./cartRouter";
 import { settingsRouter } from "./settingsRouter";
 import { tiendanubeRouter } from "./tiendanubeRouter";
+import { goldCoinsRouter } from "./goldCoinsRouter";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -16,6 +17,7 @@ export const appRouter = createRouter({
   cart: cartRouter,
   settings: settingsRouter,
   tiendanube: tiendanubeRouter,
+  goldCoins: goldCoinsRouter,
 });
 
 export type AppRouter = typeof appRouter;

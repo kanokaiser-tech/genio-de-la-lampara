@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Package, ShoppingCart, ClipboardList, Settings, LogOut, Menu, X, Lamp, KeyRound, Loader2 } from "lucide-react";
+import { Package, ShoppingCart, ClipboardList, Settings, LogOut, Menu, X, Lamp, KeyRound, Loader2, Coins } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 
@@ -41,11 +41,13 @@ export default function Layout() {
         { to: "/productos", label: "Productos", icon: Package },
         { to: "/pedido", label: "Pedidos", icon: ShoppingCart },
         { to: "/mis-pedidos", label: "Mis Pedidos", icon: ClipboardList },
+        { to: "/monedas", label: "Monedas de Oro", icon: Coins },
       ]
     : [
         { to: "/productos", label: "Productos", icon: Package },
         { to: "/pedido", label: "Mi Pedido", icon: ShoppingCart },
         { to: "/mis-pedidos", label: "Mis Pedidos", icon: ClipboardList },
+        { to: "/monedas", label: "Monedas de Oro", icon: Coins },
       ];
 
   if (isLogin) return <Outlet />;
@@ -68,6 +70,13 @@ export default function Layout() {
               ))}
               <div className="flex items-center gap-3 ml-4 pl-4 border-l border-blue-400/50">
                 {isSuperadmin && <span className="text-yellow-300 text-xs font-bold">SUPER</span>}
+
+                {/* Monedas de oro */}
+                <Link to="/monedas" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-yellow-500/20 rounded-lg text-yellow-300 hover:bg-yellow-500/30 transition-colors" title="Monedas de Oro">
+                  <Coins className="w-4 h-4" />
+                  <span className="text-xs font-bold">{(user as any)?.goldCoins ?? 0}</span>
+                </Link>
+
                 <span className="text-sm text-blue-100">{user?.name}</span>
 
                 {/* Cambiar contrasena */}

@@ -19,6 +19,7 @@ export const users = mysqlTable("users", {
   phone: varchar("phone", { length: 50 }),
   role: mysqlEnum("role", ["superadmin", "admin", "revendedor"]).default("revendedor").notNull(),
   parentId: bigint("parentId", { mode: "number", unsigned: true }),
+  goldCoins: int("goldCoins").default(0).notNull(),
   discountType: mysqlEnum("discountType", ["efectivo", "transferencia"]).default("efectivo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
@@ -99,6 +100,20 @@ export const settings = mysqlTable("settings", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
+
+export const goldCoinTransactions = mysqlTable("goldCoinTransactions", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+  orderId: bigint("orderId", { mode: "number", unsigned: true }),
+  type: mysqlEnum("type", ["earned", "spent", "expired"]).notNull(),
+  amount: int("amount").notNull(),
+  description: varchar("description", { length: 255 }),
+  monthKey: varchar("monthKey", { length: 7 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type GoldCoinTransaction = typeof goldCoinTransactions.$inferSelect;
+export type InsertGoldCoinTransaction = typeof goldCoinTransactions.$inferInsert;
 
 export type Setting = typeof settings.$inferSelect;
 export type InsertSetting = typeof settings.$inferInsert;

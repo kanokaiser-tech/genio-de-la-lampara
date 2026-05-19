@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { eq, desc, and, gte, lte } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { createRouter, userQuery, adminQuery, superadminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { orders, orderItems, users, products, settings } from "@db/schema";
+import { orders, orderItems, users, products, settings, goldCoinTransactions } from "@db/schema";
+import { calculateGoldCoins, coinsToPesos, GOLD_COIN_VALUE } from "./goldCoinsRouter";
 
 export const orderRouter = createRouter({
   /* ================================================================
@@ -12,6 +13,7 @@ export const orderRouter = createRouter({
     .input(z.object({
       paymentType: z.enum(["efectivo", "transferencia"]),
       notes: z.string().optional(),
+      goldCoinsUsed: z.number().int().min(0).default(0),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -31,9 +33,21 @@ export const orderRouter = createRouter({
       }
 
       const priceField = input.paymentType === "efectivo" ? "priceCash30" : "priceTransfer25";
-      const total = cartItems2.reduce((sum: number, item: any) => {
+      let total = cartItems2.reduce((sum: number, item: any) => {
         return sum + (Number(item[priceField]) * item.quantity);
       }, 0);
+
+      // Aplicar descuento con monedas de oro
+      let discountPesos = 0;
+      if (input.goldCoinsUsed > 0) {
+        // Verificar saldo
+        const [userRow] = await db.select({ goldCoins: users.goldCoins }).from(users).where(eq(users.id, userId));
+        if (!userRow || userRow.goldCoins < input.goldCoinsUsed) {
+          throw new Error("Saldo insuficiente de monedas de oro");
+        }
+        discountPesos = coinsToPesos(input.goldCoinsUsed);
+        total = Math.max(0, total - discountPesos);
+      }
 
       // Insert order
       const orderResult = await db.insert(orders).values({
@@ -61,10 +75,24 @@ export const orderRouter = createRouter({
         });
       }
 
+      // Si usó monedas, registrar gasto
+      if (input.goldCoinsUsed > 0) {
+        const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+        await db.insert(goldCoinTransactions).values({
+          userId,
+          orderId,
+          type: "spent",
+          amount: -input.goldCoinsUsed,
+          description: `Usadas en pedido #${orderId}`,
+          monthKey,
+        });
+        await db.execute(sql`UPDATE users SET goldCoins = goldCoins - ${input.goldCoinsUsed} WHERE id = ${userId}`);
+      }
+
       // Clear cart
       await db.execute(`DELETE FROM cartItems WHERE userId = ${userId}` as any);
 
-      return { id: orderId, total };
+      return { id: orderId, total, discountPesos, goldCoinsUsed: input.goldCoinsUsed };
     }),
 
   /* ================================================================
@@ -218,6 +246,32 @@ export const orderRouter = createRouter({
       // Actualizar estado del pedido
       await db.update(orders).set({ status: "approved" })
         .where(eq(orders.id, input.id));
+
+      // === MONEDAS DE ORO: calcular y asignar al revendedor ===
+      try {
+        const orderData = await db.select().from(orders).where(eq(orders.id, input.id));
+        const order = orderData[0];
+        if (order && order.status === "approved") {
+          const orderTotal = Number(order.totalAmount);
+          const paymentType = order.paymentType as "efectivo" | "transferencia";
+          const earnedCoins = calculateGoldCoins(orderTotal, paymentType);
+
+          if (earnedCoins > 0) {
+            const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+            await db.insert(goldCoinTransactions).values({
+              userId: order.userId,
+              orderId: order.id,
+              type: "earned",
+              amount: earnedCoins,
+              description: `Ganadas por pedido #${order.id} (${paymentType === "efectivo" ? "1%" : "0.5%"})`,
+              monthKey,
+            });
+            await db.execute(sql`UPDATE users SET goldCoins = goldCoins + ${earnedCoins} WHERE id = ${order.userId}`);
+          }
+        }
+      } catch {
+        // Si falla el calculo de monedas, no bloqueamos la aprobacion
+      }
 
       // Webhook
       try {

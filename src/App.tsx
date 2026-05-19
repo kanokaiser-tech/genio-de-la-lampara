@@ -8,6 +8,7 @@ import ProductsPage from "./pages/ProductsPage";
 import CartPage from "./pages/CartPage";
 import OrdersPage from "./pages/OrdersPage";
 import AdminPage from "./pages/AdminPage";
+import GoldCoinsPage from "./pages/GoldCoinsPage";
 import NotFound from "./pages/NotFound";
 
 function Protected({ children, adminOnly }: { children: React.ReactNode; adminOnly?: boolean }) {
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/productos" element={<Protected><ProductsPage /></Protected>} />
         <Route path="/pedido" element={<Protected><CartPage /></Protected>} />
         <Route path="/mis-pedidos" element={<Protected><OrdersPage /></Protected>} />
+        <Route path="/monedas" element={<Protected><GoldCoinsPage /></Protected>} />
         <Route path="/admin" element={<Protected adminOnly><AdminPage /></Protected>} />
         <Route path="*" element={<NotFound />} />
       </Route>

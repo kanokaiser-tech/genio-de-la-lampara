@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -81,6 +81,10 @@ export default function AdminPage() {
       utils.order.myOrdersAsAdmin.invalidate();
     },
   });
+  const { data: coinStats } = trpc.goldCoins.stats.useQuery(undefined, { enabled: isSuperadmin });
+  const expireCoins = trpc.goldCoins.expireMonthly.useMutation({
+    onSuccess: () => utils.goldCoins.stats.invalidate(),
+  });
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -99,6 +103,7 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
     ...(isSuperadmin ? [{ value: "settings", label: "Config", icon: Settings }] : []),
     ...(isSuperadmin ? [{ value: "superadmins", label: `SuperAdmins (${superadmins?.length ?? 0})`, icon: Shield }] : []),
     ...(isSuperadmin ? [{ value: "sales", label: "Ventas", icon: TrendingUp }] : []),
+    ...(isSuperadmin ? [{ value: "coins", label: "Monedas", icon: Coins }] : []),
   ];
 
   return (
@@ -539,6 +544,74 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                   })}
                 </div>
               </>
+            )}
+          </TabsContent>
+        )}
+
+        {/* MONEDAS DE ORO — solo superadmin */}
+        {isSuperadmin && (
+          <TabsContent value="coins" className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Coins className="w-6 h-6 text-yellow-500" />
+              <h2 className="text-xl font-bold text-gray-900">Monedas de Oro</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">1 moneda = $0.01 | Efectivo: 1% | Transferencia: 0.5% | Vencen mensualmente</p>
+
+            {/* Stats cards */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-yellow-700">{coinStats?.totalInCirculation ?? 0}</p>
+                <p className="text-xs text-yellow-600 font-medium">En circulacion</p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-green-700">{coinStats?.earnedThisMonth ?? 0}</p>
+                <p className="text-xs text-green-600 font-medium">Ganadas este mes</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-red-700">{coinStats?.spentThisMonth ?? 0}</p>
+                <p className="text-xs text-red-600 font-medium">Usadas este mes</p>
+              </div>
+            </div>
+
+            {/* Vencer monedas */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <h3 className="font-semibold text-gray-900 mb-2">Vencer monedas del mes pasado</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Las monedas ganadas en un mes vencen al finalizar el siguiente mes.
+                Mes actual: <strong>{coinStats?.currentMonth ?? "-"}</strong>
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const now = new Date();
+                    now.setMonth(now.getMonth() - 1);
+                    const mk = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                    if (confirm(`Vencer todas las monedas ganadas en ${mk}?`)) expireCoins.mutate({ monthKey: mk });
+                  }}
+                  disabled={expireCoins.isPending}
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  {expireCoins.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Clock className="w-3 h-3 mr-1" /> Vencer mes anterior</>}
+                </Button>
+              </div>
+              {expireCoins.isSuccess && <p className="text-green-600 text-xs mt-2">{expireCoins.data.expiredCount} monedas vencidas</p>}
+            </div>
+
+            {/* Top usuarios */}
+            {coinStats?.topUsers && coinStats.topUsers.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase">
+                  Top revendedores con mas monedas
+                </div>
+                {coinStats.topUsers.map((u, idx) => (
+                  <div key={idx} className="flex justify-between px-4 py-3 border-t border-gray-100 text-sm">
+                    <span className="text-gray-900 font-medium">{u.name}</span>
+                    <span className="text-yellow-600 font-bold">{u.goldCoins} monedas</span>
+                  </div>
+                ))}
+              </div>
             )}
           </TabsContent>
         )}

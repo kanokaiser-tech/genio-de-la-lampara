@@ -28,13 +28,13 @@ export const authRouter = createRouter({
       );
 
       return {
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone, discountType: user.discountType, parentId: user.parentId },
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone, discountType: user.discountType, parentId: user.parentId, goldCoins: user.goldCoins },
       };
     }),
 
   me: authedQuery.query(({ ctx }) => {
     const u = ctx.user;
-    return { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, discountType: u.discountType, parentId: u.parentId };
+    return { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, discountType: u.discountType, parentId: u.parentId, goldCoins: u.goldCoins };
   }),
 
   logout: authedQuery.mutation(({ ctx }) => {
