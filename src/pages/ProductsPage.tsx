@@ -254,7 +254,7 @@ export default function ProductsPage() {
               <h2 className="text-lg font-bold text-blue-600 mb-3 flex items-center gap-2">
                 <span className="w-1.5 h-5 bg-blue-600 rounded-full" />{cat} <span className="text-sm text-gray-400 font-normal">({prods?.length ?? 0})</span>
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {prods?.map(p => {
                   const stockNum = Number(p.stock ?? 0);
                   const stockColor = stockNum <= 0 ? "text-red-500" : stockNum <= 5 ? "text-orange-500" : stockNum <= 10 ? "text-amber-500" : "text-green-600";
@@ -266,7 +266,7 @@ export default function ProductsPage() {
                       className={`bg-white border rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden ${isHighlighted ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/50 scale-[1.02]" : "border-gray-200"}`}
                     >
                       {/* Imagen del producto */}
-                      <div className="relative w-full h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+                      <div className="relative w-full h-28 bg-gray-100 flex items-center justify-center overflow-hidden">
                         {p.imageUrl ? (
                           <img
                             src={p.imageUrl}
@@ -282,27 +282,27 @@ export default function ProductsPage() {
                           </div>
                         )}
                         {stockNum <= 5 && stockNum > 0 && (
-                          <Badge className="absolute top-2 right-2 bg-orange-100 text-orange-600 border-orange-200 text-xs">Quedan {stockNum}</Badge>
+                          <Badge className="absolute top-1.5 right-1.5 bg-orange-100 text-orange-600 border-orange-200 text-[9px] px-1 py-0">{stockNum}</Badge>
                         )}
                         {stockNum <= 0 && (
-                          <Badge className="absolute top-2 right-2 bg-red-100 text-red-600 border-red-200 text-xs">Sin stock</Badge>
+                          <Badge className="absolute top-1.5 right-1.5 bg-red-100 text-red-600 border-red-200 text-[9px] px-1 py-0">Sin</Badge>
                         )}
                       </div>
-                      <div className="p-4">
-                        <p className="font-semibold text-sm text-gray-900 line-clamp-2 mb-2">{p.name}</p>
-                        <div className="mb-3">
-                          <p className="text-blue-600 font-bold text-lg">{formatPrice(p[priceField])} c/u</p>
-                          <p className="text-xs text-gray-400 line-through">Lista: {formatPrice(p.priceList)}</p>
-                          <p className={`text-xs font-medium mt-0.5 ${stockColor}`}>Stock: {stockNum} unidades</p>
+                      <div className="p-2.5">
+                        <p className="font-semibold text-xs text-gray-900 line-clamp-2 mb-1.5 leading-tight">{p.name}</p>
+                        <div className="mb-2">
+                          <p className="text-blue-600 font-bold text-sm">{formatPrice(p[priceField])}</p>
+                          <p className="text-[10px] text-gray-400 line-through">{formatPrice(p.priceList)}</p>
+                          <p className={`text-[10px] font-medium ${stockColor}`}>Stock: {stockNum}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => handleQty(p.id, -1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 font-bold">-</button>
-                            <span className="w-8 text-center font-medium text-gray-900">{qtys[p.id] ?? 1}</span>
-                            <button onClick={() => handleQty(p.id, 1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 font-bold">+</button>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleQty(p.id, -1)} className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 text-xs font-bold">-</button>
+                            <span className="w-5 text-center text-xs font-medium text-gray-900">{qtys[p.id] ?? 1}</span>
+                            <button onClick={() => handleQty(p.id, 1)} className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 text-xs font-bold">+</button>
                           </div>
-                          <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleAdd(p.id)} disabled={stockNum <= 0}>
-                            <Plus className="w-3.5 h-3.5 mr-1" /> Agregar
+                          <Button size="sm" className="flex-1 h-7 text-xs px-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleAdd(p.id)} disabled={stockNum <= 0}>
+                            <Plus className="w-3 h-3 mr-0.5" />
                           </Button>
                         </div>
                       </div>
