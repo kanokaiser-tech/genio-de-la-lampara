@@ -16,23 +16,23 @@ export default function Login() {
   });
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
-      <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <Card className="w-full max-w-sm bg-white border-gray-200 shadow-lg">
         <CardHeader className="text-center space-y-4">
           <div className="flex items-center justify-center">
-            <div className="w-16 h-16 bg-yellow-500/10 rounded-2xl flex items-center justify-center">
-              <Lamp className="w-8 h-8 text-yellow-500" />
+            <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center">
+              <Lamp className="w-8 h-8 text-blue-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-white">Portal de Revendedores</CardTitle>
-          <p className="text-zinc-400 text-sm">Accede con tu email y contrasena</p>
+          <CardTitle className="text-2xl text-gray-900">Portal de Revendedores</CardTitle>
+          <p className="text-gray-500 text-sm">Accede con tu email y contrasena</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={(e) => { e.preventDefault(); setError(""); login.mutate({ email, password }); }} className="space-y-3">
-            <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-zinc-800 border-zinc-700 text-white" required />
-            <Input placeholder="Contrasena" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-zinc-800 border-zinc-700 text-white" required />
-            {error && <p className="text-red-400 text-sm">{error}</p>}
-            <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold" size="lg" disabled={login.isPending}>
+            <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-gray-50 border-gray-300 text-gray-900" required />
+            <Input placeholder="Contrasena" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-gray-50 border-gray-300 text-gray-900" required />
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold" size="lg" disabled={login.isPending}>
               {login.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Ingresar"}
             </Button>
           </form>
