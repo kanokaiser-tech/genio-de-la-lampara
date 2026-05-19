@@ -118,11 +118,7 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
 
         {/* PRODUCTS */}
         <TabsContent value="products" className="space-y-4">
-          <div className="flex justify-between items-center bg-blue-50 border border-blue-100 rounded-xl p-4">
-            <p className="text-sm text-blue-700 font-medium flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Los productos se agregan automaticamente desde Tiendanube via sincronizacion.</p>
-            <Button variant="outline" size="sm" onClick={() => clProd.mutate()} className="border-red-300 text-red-600 hover:bg-red-50"><Trash2 className="w-3 h-3 mr-1" /> Vaciar todo</Button>
-          </div>
-          <div className="flex justify-between items-center"><p className="text-sm text-gray-500">{products?.length ?? 0} productos</p></div>
+          <div className="flex justify-between items-center"><p className="text-sm text-gray-500">{products?.length ?? 0} productos</p><Button variant="outline" size="sm" onClick={() => clProd.mutate()} className="border-red-300 text-red-600 hover:bg-red-50"><Trash2 className="w-3 h-3 mr-1" /> Vaciar todo</Button></div>
           {lp ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
               <div className="hidden md:grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase">
