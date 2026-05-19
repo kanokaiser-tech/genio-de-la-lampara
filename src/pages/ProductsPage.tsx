@@ -254,7 +254,7 @@ export default function ProductsPage() {
               <h2 className="text-lg font-bold text-blue-600 mb-3 flex items-center gap-2">
                 <span className="w-1.5 h-5 bg-blue-600 rounded-full" />{cat} <span className="text-sm text-gray-400 font-normal">({prods?.length ?? 0})</span>
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 {prods?.map(p => {
                   const stockNum = Number(p.stock ?? 0);
                   const stockColor = stockNum <= 0 ? "text-red-500" : stockNum <= 5 ? "text-orange-500" : stockNum <= 10 ? "text-amber-500" : "text-green-600";
