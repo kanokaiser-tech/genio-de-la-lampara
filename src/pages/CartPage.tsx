@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/const";
@@ -47,8 +47,10 @@ export default function CartPage() {
   );
   const [notes, setNotes] = useState("");
   const [expressShipping, setExpressShipping] = useState(false);
+  const [useCoins, setUseCoins] = useState(false);
   const [goldCoinsUsed, setGoldCoinsUsed] = useState(0);
   const [pdfGenerated, setPdfGenerated] = useState(false);
+  const [showExpiryAlert, setShowExpiryAlert] = useState(false);
   const [orderMeta, setOrderMeta] = useState({ total: 0, totalList: 0, totalProfit: 0 });
   const orderItemsRef = useRef<OrderItemPDF[]>([]);
 
@@ -66,6 +68,14 @@ export default function CartPage() {
   /* query: monedas de oro */
   const { data: coinBalance } = trpc.goldCoins.getBalance.useQuery();
 
+  // Alerta de vencimiento: mostrar solo si quedan <= 7 dias y tiene monedas por vencer
+  useEffect(() => {
+    if (coinBalance && coinBalance.daysUntilExpiry <= 7 && coinBalance.expiringSoon > 0) {
+      const dismissed = sessionStorage.getItem("goldCoinAlertDismissed");
+      if (!dismissed) setShowExpiryAlert(true);
+    }
+  }, [coinBalance]);
+
   /* helpers de precios */
   const priceField: "products.priceCash30" | "products.priceTransfer25" =
     paymentType === "efectivo" ? "products.priceCash30" : "products.priceTransfer25";
@@ -82,7 +92,7 @@ export default function CartPage() {
   /* ---------------------------------------------------------------- */
   /*  PDF generator                                                     */
   /* ---------------------------------------------------------------- */
-  const generatePDF = useCallback((orderItems: OrderItemPDF[], meta: { total: number; totalList: number; totalProfit: number }, withShipping: boolean) => {
+  const generatePDF = useCallback((orderItems: OrderItemPDF[], meta: { total: number; totalList: number; totalProfit: number }, withShipping: boolean, coinsUsed: number = 0, coinsDiscount: number = 0) => {
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.text("Genio de la Lampara - Pedido", 14, 20);
@@ -134,22 +144,37 @@ export default function CartPage() {
     doc.setFont("helvetica", "normal");
     y += 7;
 
+    // Monedas de oro
+    if (coinsUsed > 0) {
+      doc.setTextColor(202, 138, 4);
+      doc.text(`Monedas de Oro (${coinsUsed}):`, 120, y);
+      doc.text(`-$${coinsDiscount.toLocaleString("es-AR")}`, 175, y, { align: "right" });
+      doc.setTextColor(0, 0, 0);
+      y += 7;
+    }
+
     if (withShipping) {
       doc.text("Envio Express:", 120, y);
       doc.text(`$${EXPRESS_SHIPPING.toLocaleString("es-AR")}`, 175, y, { align: "right" });
       y += 7;
-      doc.setFont("helvetica", "bold");
-      doc.text("TOTAL CON ENVIO:", 120, y);
-      doc.text(`$${(meta.total + EXPRESS_SHIPPING).toLocaleString("es-AR")}`, 175, y, { align: "right" });
-      doc.setFont("helvetica", "normal");
-      y += 7;
     }
+
+    // TOTAL A PAGAR (con monedas si aplica)
+    doc.setFont("helvetica", "bold");
+    const totalFinal = meta.total - coinsDiscount + (withShipping ? EXPRESS_SHIPPING : 0);
+    doc.setTextColor(37, 99, 235);
+    doc.text("TOTAL A PAGAR:", 120, y);
+    doc.text(`$${totalFinal.toLocaleString("es-AR")}`, 175, y, { align: "right" });
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    y += 7;
 
     doc.setTextColor(34, 197, 94);
     doc.setFont("helvetica", "bold");
     doc.text("GANANCIA NETA TOTAL:", 120, y);
     doc.text(`+$${meta.totalProfit.toLocaleString("es-AR")}`, 175, y, { align: "right" });
     doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
     y += 7;
     const pct = meta.totalList > 0 ? Math.round((meta.totalProfit / meta.totalList) * 100) : 0;
     doc.setFontSize(9);
@@ -184,10 +209,10 @@ export default function CartPage() {
     setOrderMeta(meta);
 
     createOrder.mutate(
-      { paymentType, notes: notes || undefined, goldCoinsUsed },
+      { paymentType, notes: notes || undefined, goldCoinsUsed: useCoins ? goldCoinsUsed : 0 },
       {
         onSuccess: () => {
-          setTimeout(() => { generatePDF(orderItems, meta, expressShipping); setPdfGenerated(true); }, 300);
+          setTimeout(() => { generatePDF(orderItems, meta, expressShipping, useCoins ? goldCoinsUsed : 0, coinDiscount); setPdfGenerated(true); }, 300);
         },
       }
     );
@@ -195,7 +220,7 @@ export default function CartPage() {
 
   const handleReDownloadPDF = () => {
     if (orderItemsRef.current.length > 0) {
-      generatePDF(orderItemsRef.current, orderMeta, expressShipping);
+      generatePDF(orderItemsRef.current, orderMeta, expressShipping, useCoins ? goldCoinsUsed : 0, coinDiscount);
     }
   };
 
@@ -206,14 +231,17 @@ export default function CartPage() {
     const lines = orderItemsRef.current.map(
       item => `• ${item.productName} x${item.quantity} = $${item.subtotal.toLocaleString("es-AR")} (Gana: +$${item.profitSubtotal.toLocaleString("es-AR")})`
     );
+    const finalTotal = orderMeta.total - coinDiscount + (expressShipping ? EXPRESS_SHIPPING : 0);
     const msg =
       `Hola ${myAdmin?.name ?? ""}! Te envio mi pedido de Genio de la Lampara:\n\n` +
       lines.join("\n") +
-      `\n\nTu precio total: $${orderMeta.total.toLocaleString("es-AR")}` +
+      `\n\nTu precio: $${orderMeta.total.toLocaleString("es-AR")}` +
+      (goldCoinsUsed > 0 ? `\nMonedas de Oro (${goldCoinsUsed}): -$${coinDiscount.toLocaleString("es-AR")}` : "") +
       (expressShipping ? `\nEnvio Express: $${EXPRESS_SHIPPING.toLocaleString("es-AR")}` : "") +
-      `\nTOTAL: $${(orderMeta.total + (expressShipping ? EXPRESS_SHIPPING : 0)).toLocaleString("es-AR")}` +
+      `\n*TOTAL A PAGAR: $${finalTotal.toLocaleString("es-AR")}*` +
       `\nGanancia neta: +$${orderMeta.totalProfit.toLocaleString("es-AR")}` +
       `\nPago: ${paymentType === "efectivo" ? "Efectivo (30% descuento)" : "Transferencia (25% descuento)"}` +
+      (goldCoinsUsed > 0 ? `\nPagado con puntos: $${coinDiscount.toLocaleString("es-AR")} | En efectivo: $${(finalTotal - (expressShipping ? EXPRESS_SHIPPING : 0)).toLocaleString("es-AR")}` : "") +
       (notes ? `\nNotas: ${notes}` : "") +
       `\nRevendedor: ${user?.name ?? ""}`;
     return encodeURIComponent(msg);
@@ -271,6 +299,12 @@ export default function CartPage() {
               <span className="text-gray-800">Tu precio</span>
               <span className="text-blue-600">${orderMeta.total.toLocaleString("es-AR")}</span>
             </div>
+            {useCoins && goldCoinsUsed > 0 && (
+              <div className="flex justify-between text-sm text-yellow-600 bg-yellow-50 rounded-lg px-3 py-1.5">
+                <span>Monedas de Oro ({goldCoinsUsed})</span>
+                <span>-${coinDiscount.toLocaleString("es-AR")}</span>
+              </div>
+            )}
             {expressShipping && (
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Envio Express</span>
@@ -282,9 +316,14 @@ export default function CartPage() {
               <span>+${orderMeta.totalProfit.toLocaleString("es-AR")}</span>
             </div>
             <div className="flex justify-between font-bold text-xl text-gray-900 border-t border-gray-200 pt-2">
-              <span>TOTAL{expressShipping && " CON ENVIO"}</span>
-              <span className="text-blue-600">${(orderMeta.total + (expressShipping ? EXPRESS_SHIPPING : 0)).toLocaleString("es-AR")}</span>
+              <span>TOTAL A PAGAR</span>
+              <span className="text-blue-600">${(orderMeta.total - coinDiscount + (expressShipping ? EXPRESS_SHIPPING : 0)).toLocaleString("es-AR")}</span>
             </div>
+            {useCoins && goldCoinsUsed > 0 && (
+              <p className="text-xs text-gray-400 text-right">
+                Efectivo: ${(orderMeta.total - coinDiscount).toLocaleString("es-AR")} | Puntos: ${coinDiscount.toLocaleString("es-AR")}
+              </p>
+            )}
           </div>
           {notes && <p className="text-xs text-gray-500 mt-2 italic">Notas: {notes}</p>}
         </div>
@@ -353,6 +392,34 @@ export default function CartPage() {
   /* ====== CARRITO CON ITEMS ====== */
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Popup alerta vencimiento monedas */}
+      {showExpiryAlert && coinBalance && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <div className="text-center">
+              <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Coins className="w-7 h-7 text-yellow-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">Tus monedas vencen pronto!</h3>
+              <p className="text-sm text-gray-500 mb-1">
+                Te quedan <strong className="text-yellow-600">{coinBalance.daysUntilExpiry} dias</strong> para usarlas.
+              </p>
+              <p className="text-sm text-gray-700 mb-4">
+                Tenes <strong className="text-yellow-600">{coinBalance.expiringSoon} monedas</strong> ({formatPrice(coinBalance.expiringSoon * 0.01)}) que vencen este mes.
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={() => setShowExpiryAlert(false)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">
+                  Entendido
+                </Button>
+                <Button variant="ghost" onClick={() => { sessionStorage.setItem("goldCoinAlertDismissed", "1"); setShowExpiryAlert(false); }} className="text-gray-500">
+                  No avisar mas
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-4 mb-6">
         <Link to="/productos" className="text-gray-400 hover:text-gray-900"><ArrowLeft className="w-5 h-5" /></Link>
         <h1 className="text-2xl font-bold text-gray-900">Tu Pedido</h1>
@@ -404,28 +471,37 @@ export default function CartPage() {
             <Switch checked={expressShipping} onCheckedChange={setExpressShipping} />
           </div>
 
-          {/* Monedas de oro */}
+          {/* Monedas de oro - Switch + slider condicional */}
           {coinBalance && coinBalance.balance > 0 && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Coins className="w-4 h-4 text-yellow-600" />
-                <p className="text-sm font-medium text-gray-900">Monedas de oro</p>
-                <span className="text-xs text-yellow-600 font-bold ml-auto">{coinBalance.balance} disponibles</span>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-600" />
+                  <p className="text-sm font-medium text-gray-900">Usar Monedas de Oro</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-yellow-600 font-bold">{coinBalance.balance}</span>
+                  <Switch checked={useCoins} onCheckedChange={(checked) => { setUseCoins(checked); if (!checked) setGoldCoinsUsed(0); }} />
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={0}
-                  max={Math.min(coinBalance.balance, Math.floor((subtotal + shippingCost) / 0.01))}
-                  step={1}
-                  value={goldCoinsUsed}
-                  onChange={e => setGoldCoinsUsed(Number(e.target.value))}
-                  className="flex-1 accent-yellow-500"
-                />
-                <span className="text-xs font-bold text-yellow-700 w-14 text-right">{goldCoinsUsed}</span>
-              </div>
-              {goldCoinsUsed > 0 && (
-                <p className="text-xs text-yellow-600 mt-1">Descuento: {formatPrice(coinDiscount)}</p>
+              {useCoins && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.min(coinBalance.balance, Math.floor((subtotal + shippingCost) / 0.01))}
+                      step={1}
+                      value={goldCoinsUsed}
+                      onChange={e => setGoldCoinsUsed(Number(e.target.value))}
+                      className="flex-1 accent-yellow-500"
+                    />
+                    <span className="text-xs font-bold text-yellow-700 w-14 text-right">{goldCoinsUsed}</span>
+                  </div>
+                  {goldCoinsUsed > 0 && (
+                    <p className="text-xs text-yellow-600 mt-1">Descuento: {formatPrice(coinDiscount)}</p>
+                  )}
+                </>
               )}
             </div>
           )}

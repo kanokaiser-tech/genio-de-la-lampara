@@ -30,12 +30,36 @@ function getCurrentMonthKey(): string {
 
 export const goldCoinsRouter = createRouter({
   /* ================================================================
-     OBTENER SALDO ACTUAL
+     OBTENER SALDO ACTUAL + DIAS HASTA VENCIMIENTO
      ================================================================ */
   getBalance: userQuery.query(async ({ ctx }) => {
     const db = getDb();
     const [user] = await db.select({ goldCoins: users.goldCoins }).from(users).where(eq(users.id, ctx.user.id));
-    return { balance: user?.goldCoins ?? 0, value: coinsToPesos(user?.goldCoins ?? 0) };
+
+    // Calcular dias hasta fin de mes (vencimiento)
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const daysUntilExpiry = Math.ceil((lastDay.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Monedas que vencen este mes (las del mes anterior)
+    const prevMonthKey = `${now.getFullYear()}-${String(now.getMonth()).padStart(2, "0")}`;
+    const expiringSoon = await db
+      .select({ total: sql<number>`COALESCE(SUM(${goldCoinTransactions.amount}), 0)` })
+      .from(goldCoinTransactions)
+      .where(
+        and(
+          eq(goldCoinTransactions.userId, ctx.user.id),
+          eq(goldCoinTransactions.type, "earned"),
+          eq(goldCoinTransactions.monthKey, prevMonthKey)
+        )
+      );
+
+    return {
+      balance: user?.goldCoins ?? 0,
+      value: coinsToPesos(user?.goldCoins ?? 0),
+      daysUntilExpiry,
+      expiringSoon: Number(expiringSoon[0]?.total ?? 0),
+    };
   }),
 
   /* ================================================================
