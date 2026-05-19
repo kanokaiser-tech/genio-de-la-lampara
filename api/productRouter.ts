@@ -45,4 +45,11 @@ export const productRouter = createRouter({
     await getDb().delete(products);
     return { success: true };
   }),
+
+  updateCategory: adminQuery
+    .input(z.object({ id: z.number(), category: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      await getDb().update(products).set({ category: input.category }).where(eq(products.id, input.id));
+      return { success: true };
+    }),
 });

@@ -58,6 +58,7 @@ export default function AdminPage() {
       setNewRev({ name: "", email: "", phone: "", password: "", discountType: "efectivo", parentId: "" });
     }
   });
+  const upCat = trpc.product.updateCategory.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const cAdmin = trpc.user.createAdmin.useMutation({ onSuccess: () => { utils.user.listAdmins.invalidate(); setNewAdmin({ name: "", email: "", phone: "", password: "" }); } });
   const cSuperadmin = trpc.user.createSuperadmin.useMutation({
     onSuccess: () => {
@@ -121,16 +122,27 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
           <div className="flex justify-between items-center"><p className="text-sm text-gray-500">{products?.length ?? 0} productos</p><Button variant="outline" size="sm" onClick={() => clProd.mutate()} className="border-red-300 text-red-600 hover:bg-red-50"><Trash2 className="w-3 h-3 mr-1" /> Vaciar todo</Button></div>
           {lp ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="hidden md:grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase">
+              <div className="hidden md:grid grid-cols-[1fr,160px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase">
                 <span>Nombre</span><span>Categoria</span><span className="text-center">Stock</span><span className="text-right">Lista</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Acciones</span>
               </div>
               {products?.map(p => {
                 const stockNum = Number(p.stock ?? 0);
                 const stockColor = stockNum <= 0 ? "text-red-500" : stockNum <= 5 ? "text-orange-500" : stockNum <= 10 ? "text-amber-500" : "text-green-600";
+                // Categorías únicas para el select
+                const allCategories = [...new Set(products.map(pr => pr.category).filter(Boolean))];
                 return (
-                  <div key={p.id} className="grid grid-cols-[1fr,130px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                  <div key={p.id} className="grid grid-cols-[1fr,160px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
                     <span className="truncate text-gray-900">{p.name}</span>
-                    <span className="text-gray-500 text-sm">{p.category}</span>
+                    <select
+                      value={p.category ?? ""}
+                      onChange={e => upCat.mutate({ id: p.id, category: e.target.value })}
+                      className="bg-gray-50 border border-gray-300 rounded-lg px-2 py-1 text-xs text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-full"
+                    >
+                      <option value={p.category ?? ""}>{p.category ?? "Sin categoria"}</option>
+                      {allCategories.filter(c => c !== p.category).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
                     <span className={`text-center font-bold ${stockColor}`}>{stockNum}</span>
                     <span className="text-right text-gray-400 line-through">{formatPrice(p.priceList)}</span>
                     <span className="text-right text-blue-600 font-medium">{formatPrice(p.priceCash30)}</span>
