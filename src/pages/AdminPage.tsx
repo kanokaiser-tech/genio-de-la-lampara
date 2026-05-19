@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar } from "lucide-react";
 
 export default function AdminPage() {
@@ -24,8 +31,9 @@ export default function AdminPage() {
   const [editing, setEditing] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", parentId: "" });
 
-  // Password change
-  const [changePass, setChangePass] = useState<{ id: number; name: string } | null>(null);
+  // Password change dialog
+  const [passDialogOpen, setPassDialogOpen] = useState(false);
+  const [changePassUser, setChangePassUser] = useState<{ id: number; name: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
 
   // Data
@@ -59,17 +67,26 @@ export default function AdminPage() {
     }
   });
   const dUser = trpc.user.delete.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); utils.user.byRole.invalidate(); } });
-  const chPass = trpc.user.changePassword.useMutation({ onSuccess: () => { setChangePass(null); setNewPassword(""); } });
+  const chPass = trpc.user.changePassword.useMutation({ onSuccess: () => closePassDialog() });
   const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); utils.user.byRole.invalidate(); setEditing(null); } });
   const upSet = trpc.settings.update.useMutation({ onSuccess: () => utils.settings.get.invalidate() });
   const sync = trpc.tiendanube.sync.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const test = trpc.tiendanube.test.useMutation();
   const appr = trpc.order.approve.useMutation({ onSuccess: () => utils.order.myOrdersAsAdmin.invalidate() });
   const rej = trpc.order.reject.useMutation({ onSuccess: () => utils.order.myOrdersAsAdmin.invalidate() });
+  const clearHistory = trpc.order.clearHistory.useMutation({
+    onSuccess: () => {
+      utils.order.salesByAdmin.invalidate();
+      utils.order.myOrdersAsAdmin.invalidate();
+    },
+  });
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "", parentId: user.parentId ? String(user.parentId) : "" }); };
+
+const openPassDialog = (user: any) => { setChangePassUser({ id: user.id, name: user.name }); setNewPassword(""); setPassDialogOpen(true); };
+const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null); setNewPassword(""); };
 
   // Tabs disponibles segun rol
   const tabs = [
@@ -220,7 +237,7 @@ export default function AdminPage() {
                         <Badge variant="outline" className="text-blue-600 border-blue-300 w-fit text-xs">{r.discountType === "efectivo" ? "30%" : "25%"}</Badge>
                         <span className="text-gray-600 text-xs truncate" title={assignedAdmin?.email}>{assignedAdmin?.name || <span className="text-gray-400">Sin asignar</span>}</span>
                         <button onClick={() => startEdit(r)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => setChangePass({ id: r.id, name: r.name })} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
+                        <button onClick={() => openPassDialog(r)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
                         <button onClick={() => dUser.mutate({ id: r.id })} className="text-gray-400 hover:text-red-500 flex justify-center"><Trash2 className="w-4 h-4" /></button>
                       </>
                     )}
@@ -228,16 +245,6 @@ export default function AdminPage() {
                 );
               })}
               {(!revs || revs.length === 0) && <div className="text-center py-8 text-gray-500 text-sm">No hay revendedores</div>}
-            </div>
-          )}
-          {changePass && (
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-              <h4 className="font-medium mb-2 text-gray-900">Cambiar contrasena de {changePass.name}</h4>
-              <div className="flex gap-2">
-                <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-gray-50 border-gray-300 max-w-xs text-gray-900" />
-                <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-blue-600 hover:bg-blue-700 text-white"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
-                <Button variant="ghost" onClick={() => setChangePass(null)} className="text-gray-500">Cancelar</Button>
-              </div>
             </div>
           )}
         </TabsContent>
@@ -276,7 +283,7 @@ export default function AdminPage() {
                       <span className="text-gray-500">{a.email}</span>
                       <span className="text-gray-500">{a.phone || "-"}</span>
                       <button onClick={() => startEdit(a)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => setChangePass({ id: a.id, name: a.name })} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
+                      <button onClick={() => openPassDialog(a)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
                       <button onClick={() => dUser.mutate({ id: a.id })} className="text-gray-400 hover:text-red-500 flex justify-center"><Trash2 className="w-4 h-4" /></button>
                     </>
                   )}
@@ -284,16 +291,6 @@ export default function AdminPage() {
               ))}
               {(!admins || admins.length === 0) && <div className="text-center py-8 text-gray-500 text-sm">No hay otros admins</div>}
             </div>
-            {changePass && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <h4 className="font-medium mb-2 text-gray-900">Cambiar contrasena de {changePass.name}</h4>
-                <div className="flex gap-2">
-                  <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-gray-50 border-gray-300 max-w-xs text-gray-900" />
-                  <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-blue-600 hover:bg-blue-700 text-white"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
-                  <Button variant="ghost" onClick={() => setChangePass(null)} className="text-gray-500">Cancelar</Button>
-                </div>
-              </div>
-            )}
           </TabsContent>
         )}
 
@@ -421,7 +418,7 @@ export default function AdminPage() {
                       <span className="text-gray-500">{a.email}</span>
                       <span className="text-gray-500">{a.phone || "-"}</span>
                       <button onClick={() => startEdit(a)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => setChangePass({ id: a.id, name: a.name })} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
+                      <button onClick={() => openPassDialog(a)} className="text-gray-400 hover:text-blue-600 flex justify-center"><Lock className="w-4 h-4" /></button>
                       <button onClick={() => { if (confirm('Eliminar este superadmin?')) dUser.mutate({ id: a.id }); }} className="text-gray-400 hover:text-red-500 flex justify-center"><Trash2 className="w-4 h-4" /></button>
                     </>
                   )}
@@ -429,16 +426,6 @@ export default function AdminPage() {
               ))}
               {(!superadmins || superadmins.length === 0) && <div className="text-center py-8 text-gray-500 text-sm">No hay superadmins</div>}
             </div>
-            {changePass && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <h4 className="font-medium mb-2 text-gray-900">Cambiar contrasena de {changePass.name}</h4>
-                <div className="flex gap-2">
-                  <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-gray-50 border-gray-300 max-w-xs text-gray-900" />
-                  <Button onClick={() => chPass.mutate({ id: changePass.id, newPassword })} disabled={newPassword.length < 4} className="bg-blue-600 hover:bg-blue-700 text-white"><Lock className="w-4 h-4 mr-1" /> Cambiar</Button>
-                  <Button variant="ghost" onClick={() => setChangePass(null)} className="text-gray-500">Cancelar</Button>
-                </div>
-              </div>
-            )}
           </TabsContent>
         )}
 
@@ -449,7 +436,18 @@ export default function AdminPage() {
               <TrendingUp className="w-6 h-6 text-blue-600" />
               <h2 className="text-xl font-bold text-gray-900">Rendicion de Ventas por Admin</h2>
             </div>
-            <p className="text-sm text-gray-500 mb-4">Total diario de pedidos aprobados y rechazados por cada administrador.</p>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-gray-500">Total diario de pedidos aprobados y rechazados por cada administrador.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { if (confirm("ESTO ELIMINARA TODOS LOS PEDIDOS APROBADOS Y RECHAZADOS. Estas seguro?")) clearHistory.mutate(); }}
+                disabled={clearHistory.isPending}
+                className="border-red-300 text-red-600 hover:bg-red-50"
+              >
+                {clearHistory.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Trash2 className="w-3 h-3 mr-1" /> Borrar historial</>}
+              </Button>
+            </div>
 
             {ls ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (!salesByAdmin || salesByAdmin.length === 0) ? (
               <div className="text-center py-16 text-gray-500 bg-white border border-gray-200 rounded-xl">
@@ -529,6 +527,32 @@ export default function AdminPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Dialog global para cambiar contrasena */}
+      <Dialog open={passDialogOpen} onOpenChange={setPassDialogOpen}>
+        <DialogContent className="bg-white border-gray-200">
+          <DialogHeader>
+            <DialogTitle className="text-gray-900 flex items-center gap-2">
+              <Lock className="w-5 h-5 text-blue-600" /> Cambiar Contrasena
+            </DialogTitle>
+          </DialogHeader>
+          {changePassUser && (
+            <form onSubmit={(e) => { e.preventDefault(); if (newPassword.length >= 4) chPass.mutate({ id: changePassUser.id, newPassword }); }} className="space-y-3 pt-2">
+              <p className="text-sm text-gray-600">Usuario: <strong className="text-gray-900">{changePassUser.name}</strong></p>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Nueva contrasena (min 4 caracteres)</label>
+                <Input type="password" placeholder="Nueva contrasena" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-gray-50 border-gray-300 text-gray-900" required minLength={4} />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button type="submit" disabled={chPass.isPending || newPassword.length < 4} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  {chPass.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Lock className="w-4 h-4 mr-1" /> Cambiar</>}
+                </Button>
+                <Button variant="ghost" type="button" onClick={closePassDialog} className="text-gray-500">Cancelar</Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

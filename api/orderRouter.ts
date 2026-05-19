@@ -270,6 +270,18 @@ export const orderRouter = createRouter({
     }),
 
   /* ================================================================
+     SUPERADMIN: Borrar historial de ventas (todos los pedidos)
+     ================================================================ */
+  clearHistory: superadminQuery
+    .mutation(async () => {
+      const db = getDb();
+      // Primero borrar items, luego orders
+      await db.execute(`DELETE FROM orderItems` as any);
+      await db.execute(`DELETE FROM orders` as any);
+      return { success: true };
+    }),
+
+  /* ================================================================
      SUPERADMIN: Reporte de ventas por admin (aprobados/rechazados)
      ================================================================ */
   salesByAdmin: superadminQuery.query(async () => {
