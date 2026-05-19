@@ -127,24 +127,24 @@ export default function ProductsPage() {
             <div className="p-6 space-y-4">
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                 <p className="text-sm text-gray-700">
-                  Por cada compra que hagas, ganas monedas de oro que podes usar para <strong>descuentos</strong> en tus proximas compras.
+                  Por cada compra que hagas, <strong>sumas monedas de oro</strong> que podes usar para <strong>descuentos</strong> en tus proximas compras.
                 </p>
               </div>
               <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
                 <Zap className="w-6 h-6 text-green-600 shrink-0" />
                 <div>
                   <p className="font-bold text-green-800 text-sm">PAGA EN EFECTIVO Y SUMA DOBLE</p>
-                  <p className="text-xs text-green-600">1% en efectivo vs 0.5% en transferencia</p>
+                  <p className="text-xs text-green-600">Efectivo te da el doble de monedas</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-center text-sm">
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <p className="text-blue-700 font-bold text-lg">1%</p>
-                  <p className="text-blue-500 text-xs">Efectivo</p>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-green-700 font-bold text-lg flex items-center justify-center gap-1"><Zap className="w-4 h-4" /> DOBLE</p>
+                  <p className="text-green-500 text-xs">Pagando en efectivo</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-gray-700 font-bold text-lg">0.5%</p>
-                  <p className="text-gray-500 text-xs">Transferencia</p>
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <p className="text-blue-700 font-bold text-lg">NORMAL</p>
+                  <p className="text-blue-500 text-xs">Otras formas de pago</p>
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
@@ -172,7 +172,7 @@ export default function ProductsPage() {
                 <Zap className="w-4 h-4" /> PAGA EN EFECTIVO Y SUMA DOBLE
               </p>
               <p className="text-yellow-100 text-xs">
-                Ganas el <strong>1%</strong> en efectivo o el <strong>0.5%</strong> por transferencia. Usalas para descuentos!
+                Suma monedas de oro con cada compra y usalas para descuentos!
               </p>
             </div>
           </div>
@@ -270,13 +270,13 @@ export default function ProductsPage() {
                 <Coins className="w-3.5 h-3.5" /> Monedas de Oro
               </p>
               <p className="text-xs text-gray-600 mb-2">
-                Ganas monedas en cada compra y las usas como descuento.
+                Suma monedas con cada compra y usalas para descuentos!
               </p>
               <div className="bg-green-100 border border-green-200 rounded-lg p-2 mb-2">
                 <p className="text-xs font-bold text-green-800 flex items-center gap-1">
-                  <Zap className="w-3 h-3" /> Efectivo: 1%
+                  <Zap className="w-3 h-3" /> Efectivo = doble
                 </p>
-                <p className="text-xs text-green-600">Transferencia: 0.5%</p>
+                <p className="text-xs text-green-600">monedas</p>
               </div>
               <button
                 onClick={() => setShowPromo(true)}

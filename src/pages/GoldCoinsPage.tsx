@@ -2,7 +2,7 @@ import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Coins, ArrowDown, ArrowUp, Clock, TrendingUp, History } from "lucide-react";
+import { Loader2, Coins, ArrowDown, ArrowUp, Clock, TrendingUp, History, Zap } from "lucide-react";
 
 const GOLD_COIN_VALUE = 0.01;
 
@@ -61,8 +61,8 @@ export default function GoldCoinsPage() {
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
         <h3 className="font-semibold text-blue-800 mb-2 text-sm">Como funcionan las Monedas de Oro</h3>
         <ul className="text-xs text-blue-700 space-y-1">
-          <li className="flex items-center gap-2"><ArrowDown className="w-3 h-3 text-green-600 shrink-0" /> Pago en efectivo: <strong>1%</strong> del total en monedas de oro</li>
-          <li className="flex items-center gap-2"><ArrowDown className="w-3 h-3 text-green-600 shrink-0" /> Pago por transferencia: <strong>0.5%</strong> del total en monedas de oro</li>
+          <li className="flex items-center gap-2"><Zap className="w-3 h-3 text-green-600 shrink-0" /> Paga en <strong>efectivo</strong> y sumas el <strong>doble</strong> de monedas</li>
+          <li className="flex items-center gap-2"><ArrowDown className="w-3 h-3 text-green-600 shrink-0" /> Con otras formas de pago sumas la mitad</li>
           <li className="flex items-center gap-2"><ArrowUp className="w-3 h-3 text-red-500 shrink-0" /> Podes usarlas para <strong>descuentos</strong> en cualquier compra</li>
           <li className="flex items-center gap-2"><Clock className="w-3 h-3 text-orange-500 shrink-0" /> Las monedas ganadas en un mes <strong>vencen al mes siguiente</strong></li>
           <li className="flex items-center gap-2"><Coins className="w-3 h-3 text-yellow-500 shrink-0" /> <strong>1 moneda = $0.01</strong> (1 centavo)</li>
