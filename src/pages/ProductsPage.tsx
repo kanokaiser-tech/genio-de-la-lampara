@@ -5,7 +5,7 @@ import { formatPrice } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Search, Plus, Package, Loader2, X, Menu, ChevronRight } from "lucide-react";
+import { ShoppingCart, Search, Plus, Package, Loader2, X, Menu, ChevronRight, ImageOff } from "lucide-react";
 import { useNavigate } from "react-router";
 
 export default function ProductsPage() {
@@ -263,27 +263,48 @@ export default function ProductsPage() {
                     <div
                       key={p.id}
                       ref={el => { productRefs.current[p.id] = el; }}
-                      className={`bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-all ${isHighlighted ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/50 scale-[1.02]" : "border-gray-200"}`}
+                      className={`bg-white border rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden ${isHighlighted ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/50 scale-[1.02]" : "border-gray-200"}`}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <p className="font-semibold text-sm text-gray-900 line-clamp-2 flex-1">{p.name}</p>
-                        {stockNum <= 5 && stockNum > 0 && <Badge className="bg-orange-100 text-orange-600 border-orange-200 text-xs">Quedan {stockNum}</Badge>}
-                        {stockNum <= 0 && <Badge className="bg-red-100 text-red-600 border-red-200 text-xs">Sin stock</Badge>}
+                      {/* Imagen del producto */}
+                      <div className="relative w-full h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+                        {p.imageUrl ? (
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center gap-1 text-gray-300">
+                            <ImageOff className="w-8 h-8" />
+                            <span className="text-xs">Sin imagen</span>
+                          </div>
+                        )}
+                        {stockNum <= 5 && stockNum > 0 && (
+                          <Badge className="absolute top-2 right-2 bg-orange-100 text-orange-600 border-orange-200 text-xs">Quedan {stockNum}</Badge>
+                        )}
+                        {stockNum <= 0 && (
+                          <Badge className="absolute top-2 right-2 bg-red-100 text-red-600 border-red-200 text-xs">Sin stock</Badge>
+                        )}
                       </div>
-                      <div className="mb-3">
-                        <p className="text-blue-600 font-bold text-lg">{formatPrice(p[priceField])} c/u</p>
-                        <p className="text-xs text-gray-400 line-through">Lista: {formatPrice(p.priceList)}</p>
-                        <p className={`text-xs font-medium mt-0.5 ${stockColor}`}>Stock: {stockNum} unidades</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => handleQty(p.id, -1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 font-bold">-</button>
-                          <span className="w-8 text-center font-medium text-gray-900">{qtys[p.id] ?? 1}</span>
-                          <button onClick={() => handleQty(p.id, 1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 font-bold">+</button>
+                      <div className="p-4">
+                        <p className="font-semibold text-sm text-gray-900 line-clamp-2 mb-2">{p.name}</p>
+                        <div className="mb-3">
+                          <p className="text-blue-600 font-bold text-lg">{formatPrice(p[priceField])} c/u</p>
+                          <p className="text-xs text-gray-400 line-through">Lista: {formatPrice(p.priceList)}</p>
+                          <p className={`text-xs font-medium mt-0.5 ${stockColor}`}>Stock: {stockNum} unidades</p>
                         </div>
-                        <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleAdd(p.id)} disabled={stockNum <= 0}>
-                          <Plus className="w-3.5 h-3.5 mr-1" /> Agregar
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleQty(p.id, -1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 font-bold">-</button>
+                            <span className="w-8 text-center font-medium text-gray-900">{qtys[p.id] ?? 1}</span>
+                            <button onClick={() => handleQty(p.id, 1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 font-bold">+</button>
+                          </div>
+                          <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleAdd(p.id)} disabled={stockNum <= 0}>
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Agregar
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   );

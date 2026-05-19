@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -122,16 +122,24 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
           <div className="flex justify-between items-center"><p className="text-sm text-gray-500">{products?.length ?? 0} productos</p><Button variant="outline" size="sm" onClick={() => clProd.mutate()} className="border-red-300 text-red-600 hover:bg-red-50"><Trash2 className="w-3 h-3 mr-1" /> Vaciar todo</Button></div>
           {lp ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="hidden md:grid grid-cols-[1fr,160px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase">
-                <span>Nombre</span><span>Categoria</span><span className="text-center">Stock</span><span className="text-right">Lista</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Acciones</span>
+              <div className="hidden md:grid grid-cols-[48px,1fr,160px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span></span><span>Nombre</span><span>Categoria</span><span className="text-center">Stock</span><span className="text-right">Lista</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Acciones</span>
               </div>
               {products?.map(p => {
                 const stockNum = Number(p.stock ?? 0);
                 const stockColor = stockNum <= 0 ? "text-red-500" : stockNum <= 5 ? "text-orange-500" : stockNum <= 10 ? "text-amber-500" : "text-green-600";
-                // Categorías únicas para el select
+                // Categorias unicas para el select
                 const allCategories = [...new Set(products.map(pr => pr.category).filter(Boolean))];
                 return (
-                  <div key={p.id} className="grid grid-cols-[1fr,160px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                  <div key={p.id} className="grid grid-cols-[48px,1fr,160px,80px,110px,110px,110px,100px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                    {/* Miniatura */}
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <ImageOff className="w-4 h-4 text-gray-300" />
+                      )}
+                    </div>
                     <span className="truncate text-gray-900">{p.name}</span>
                     <select
                       value={p.category ?? ""}
