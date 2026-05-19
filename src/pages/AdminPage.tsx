@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
