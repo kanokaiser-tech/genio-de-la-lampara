@@ -14,6 +14,7 @@ export const orderRouter = createRouter({
       paymentType: z.enum(["efectivo", "transferencia"]),
       notes: z.string().optional(),
       goldCoinsUsed: z.number().int().min(0).default(0),
+      shippingType: z.enum(["none", "express", "free"]).default("none"),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -37,10 +38,14 @@ export const orderRouter = createRouter({
         return sum + (Number(item[priceField]) * item.quantity);
       }, 0);
 
+      // Sumar envio express si aplica
+      if (input.shippingType === "express") {
+        total += 5000;
+      }
+
       // Aplicar descuento con monedas de oro
       let discountPesos = 0;
       if (input.goldCoinsUsed > 0) {
-        // Verificar saldo
         const [userRow] = await db.select({ goldCoins: users.goldCoins }).from(users).where(eq(users.id, userId));
         if (!userRow || userRow.goldCoins < input.goldCoinsUsed) {
           throw new Error("Saldo insuficiente de monedas de oro");
@@ -55,6 +60,7 @@ export const orderRouter = createRouter({
         adminId: ctx.user.parentId ?? userId,
         totalAmount: total.toFixed(2),
         paymentType: input.paymentType,
+        shippingType: input.shippingType,
         status: "pending",
         notes: input.notes || null,
         webhookSent: false,
@@ -75,7 +81,7 @@ export const orderRouter = createRouter({
         });
       }
 
-      // Si usó monedas, registrar gasto
+      // Si uso monedas, registrar gasto
       if (input.goldCoinsUsed > 0) {
         const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
         await db.insert(goldCoinTransactions).values({
@@ -185,6 +191,92 @@ export const orderRouter = createRouter({
         revendedorPhone: rev?.phone ?? "",
         items,
       };
+    }),
+
+  /* ================================================================
+     ADMIN: Editar items de un pedido pendiente
+     ================================================================ */
+  updateItem: adminQuery
+    .input(z.object({ orderId: z.number(), itemId: z.number(), quantity: z.number().int().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      // Verificar que el pedido esta pendiente
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId));
+      if (!order || order.status !== "pending") throw new Error("Solo se pueden editar pedidos pendientes");
+
+      // Obtener item actual
+      const [item] = await db.select().from(orderItems).where(eq(orderItems.id, input.itemId));
+      if (!item || item.orderId !== input.orderId) throw new Error("Item no encontrado");
+
+      // Actualizar cantidad y subtotal
+      const unitPrice = Number(item.price);
+      await db.update(orderItems)
+        .set({ quantity: input.quantity, subtotal: (unitPrice * input.quantity).toFixed(2) })
+        .where(eq(orderItems.id, input.itemId));
+
+      // Recalcular total del pedido
+      const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
+      const shippingCost = order.shippingType === "express" ? 5000 : 0;
+      const newTotal = allItems.reduce((sum, i) => sum + Number(i.subtotal), 0) + shippingCost;
+      await db.update(orders).set({ totalAmount: newTotal.toFixed(2) }).where(eq(orders.id, input.orderId));
+
+      return { success: true, newTotal };
+    }),
+
+  removeItem: adminQuery
+    .input(z.object({ orderId: z.number(), itemId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId));
+      if (!order || order.status !== "pending") throw new Error("Solo se pueden editar pedidos pendientes");
+
+      await db.delete(orderItems).where(eq(orderItems.id, input.itemId));
+
+      // Recalcular total
+      const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
+      const shippingCost = order.shippingType === "express" ? 5000 : 0;
+      const newTotal = allItems.reduce((sum, i) => sum + Number(i.subtotal), 0) + shippingCost;
+      await db.update(orders).set({ totalAmount: newTotal.toFixed(2) }).where(eq(orders.id, input.orderId));
+
+      return { success: true, newTotal, remainingItems: allItems.length };
+    }),
+
+  addItem: adminQuery
+    .input(z.object({
+      orderId: z.number(),
+      productId: z.number(),
+      quantity: z.number().int().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId));
+      if (!order || order.status !== "pending") throw new Error("Solo se pueden editar pedidos pendientes");
+
+      // Obtener producto
+      const [product] = await db.select().from(products).where(eq(products.id, input.productId));
+      if (!product) throw new Error("Producto no encontrado");
+
+      const priceField = order.paymentType === "efectivo" ? "priceCash30" : "priceTransfer25";
+      const unitPrice = Number(product[priceField]);
+
+      // Insertar item
+      await db.insert(orderItems).values({
+        orderId: input.orderId,
+        productId: input.productId,
+        productName: product.name,
+        tiendanubeProductId: product.tiendanubeId ? String(product.tiendanubeId) : null,
+        quantity: input.quantity,
+        price: unitPrice.toFixed(2),
+        subtotal: (unitPrice * input.quantity).toFixed(2),
+      });
+
+      // Recalcular total
+      const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
+      const shippingCost = order.shippingType === "express" ? 5000 : 0;
+      const newTotal = allItems.reduce((sum, i) => sum + Number(i.subtotal), 0) + shippingCost;
+      await db.update(orders).set({ totalAmount: newTotal.toFixed(2) }).where(eq(orders.id, input.orderId));
+
+      return { success: true, newTotal };
     }),
 
   /* ================================================================

@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -93,6 +93,23 @@ export default function AdminPage() {
       utils.goldCoins.stats.invalidate();
       setCoinAssign({ userId: "", amount: "", description: "" });
     },
+  });
+  // Admin editar pedido
+  const [editingOrder, setEditingOrder] = useState<number | null>(null);
+  const [addProductId, setAddProductId] = useState("");
+  const [addQty, setAddQty] = useState("1");
+  const { data: orderDetail } = trpc.order.detail.useQuery(
+    { id: editingOrder! },
+    { enabled: editingOrder !== null }
+  );
+  const upItem = trpc.order.updateItem.useMutation({
+    onSuccess: () => { utils.order.detail.invalidate(); utils.order.myOrdersAsAdmin.invalidate(); },
+  });
+  const rmItem = trpc.order.removeItem.useMutation({
+    onSuccess: () => { utils.order.detail.invalidate(); utils.order.myOrdersAsAdmin.invalidate(); },
+  });
+  const addItem = trpc.order.addItem.useMutation({
+    onSuccess: () => { utils.order.detail.invalidate(); utils.order.myOrdersAsAdmin.invalidate(); setAddProductId(""); setAddQty("1"); },
   });
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -329,28 +346,104 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
           {lo ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : orders?.length === 0 ? <div className="text-center py-20 text-gray-500"><ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No hay pedidos</p></div> : (
             orders?.map(o => {
               const isExp = expanded === o.id;
+              const isEditing = editingOrder === o.id;
               return (
                 <div key={o.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                  <button onClick={() => setExpanded(isExp ? null : o.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
+                  <button onClick={() => { setExpanded(isExp ? null : o.id); setEditingOrder(isEditing ? null : o.id); }} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
                     <div className="flex items-center gap-4">
                       <Badge className={o.status === "pending" ? "bg-amber-100 text-amber-700 border-amber-300" : o.status === "approved" ? "bg-green-100 text-green-700 border-green-300" : "bg-red-100 text-red-700 border-red-300"}>
                         {o.status === "pending" ? "Pendiente" : o.status === "approved" ? "Aprobado" : "Rechazado"}
                       </Badge>
                       <div className="text-left">
                         <p className="font-medium text-sm text-gray-900">Pedido #{o.id}</p>
-                        <p className="text-xs text-gray-500">{fmt(o.createdAt)} - {o.paymentType}</p>
+                        <p className="text-xs text-gray-500">{fmt(o.createdAt)} - {o.paymentType} {o.shippingType !== "none" && `- ${o.shippingType === "express" ? "Express" : "Gratis"}`}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="font-bold text-blue-600">{formatPrice(o.totalAmount)}</span>
                     </div>
                   </button>
-                  {isExp && (
+                  {isEditing && (
                     <div className="px-4 pb-4 border-t border-gray-100 pt-3">
-                      {o.notes && <p className="text-sm text-gray-500 mb-2 bg-gray-50 p-2 rounded">Notas: {o.notes}</p>}
+                      {/* Info del revendedor */}
+                      {(() => {
+                        const rev = allUsers?.find(u => u.id === o.userId);
+                        return rev && (
+                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3 flex items-center gap-2">
+                            <User className="w-4 h-4 text-blue-600" />
+                            <p className="text-sm text-blue-800"><strong>{rev.name}</strong> ({rev.email}) {rev.phone && `- ${rev.phone}`}</p>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Direccion */}
+                      {o.notes && <p className="text-sm text-gray-500 mb-3 bg-gray-50 p-2 rounded flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {o.notes}</p>}
+
+                      {/* Items del pedido */}
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos del pedido</h4>
+                      {orderDetail && orderDetail.items.length > 0 ? (
+                        <div className="space-y-2 mb-4">
+                          {orderDetail.items.map(item => (
+                            <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm">
+                              <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
+                              <span className="text-blue-600 font-medium w-20 text-right">{formatPrice(item.price)}</span>
+                              {o.status === "pending" ? (
+                                <>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    defaultValue={item.quantity}
+                                    onBlur={e => {
+                                      const val = parseInt(e.target.value);
+                                      if (!isNaN(val) && val >= 1 && val !== item.quantity) {
+                                        upItem.mutate({ orderId: o.id, itemId: item.id, quantity: val });
+                                      }
+                                    }}
+                                    className="w-14 h-7 text-xs p-0 text-center bg-white border-gray-200"
+                                  />
+                                  <button onClick={() => { if (confirm('Eliminar este producto del pedido?')) rmItem.mutate({ orderId: o.id, itemId: item.id }); }} className="p-1 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </>
+                              ) : (
+                                <span className="text-gray-500 w-8 text-center">x{item.quantity}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400 mb-3">No hay productos</p>
+                      )}
+
+                      {/* Agregar producto al pedido */}
+                      {o.status === "pending" && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
+                          <p className="text-xs font-medium text-gray-500 mb-2">Agregar producto al pedido</p>
+                          <div className="flex gap-2">
+                            <select
+                              value={addProductId}
+                              onChange={e => setAddProductId(e.target.value)}
+                              className="flex-1 bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900"
+                            >
+                              <option value="">-- Seleccionar producto --</option>
+                              {products?.map(p => <option key={p.id} value={p.id}>{p.name} ({formatPrice(p.priceList)}) - Stock: {p.stock ?? 0}</option>)}
+                            </select>
+                            <Input type="number" min={1} value={addQty} onChange={e => setAddQty(e.target.value)} className="w-16 h-8 text-xs bg-white border-gray-200" />
+                            <Button size="sm" onClick={() => { if (!addProductId) return; addItem.mutate({ orderId: o.id, productId: Number(addProductId), quantity: Number(addQty) || 1 }); }} disabled={!addProductId || addItem.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+                              <Plus className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Total */}
+                      <div className="flex justify-between font-bold text-sm mb-3">
+                        <span className="text-gray-900">Total del pedido</span>
+                        <span className="text-blue-600">{formatPrice(o.totalAmount)}</span>
+                      </div>
+
+                      {/* Botones accion */}
                       {o.status === "pending" && (
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700 text-white">Aprobar</Button>
+                          <Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700 text-white">Aprobar y generar PDF</Button>
                           <Button size="sm" variant="outline" onClick={() => rej.mutate({ id: o.id })} className="border-red-300 text-red-600 hover:bg-red-50">Rechazar</Button>
                         </div>
                       )}
