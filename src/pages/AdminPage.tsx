@@ -78,6 +78,9 @@ export default function AdminPage() {
   const test = trpc.tiendanube.test.useMutation();
   const appr = trpc.order.approve.useMutation({ onSuccess: () => utils.order.myOrdersAsAdmin.invalidate() });
   const rej = trpc.order.reject.useMutation({ onSuccess: () => utils.order.myOrdersAsAdmin.invalidate() });
+  const chPay = trpc.order.updatePaymentType.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.detail.invalidate(); },
+  });
   const clearHistory = trpc.order.clearHistory.useMutation({
     onSuccess: () => {
       utils.order.salesByAdmin.invalidate();
@@ -355,7 +358,9 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                         {o.status === "pending" ? "Pendiente" : o.status === "approved" ? "Aprobado" : "Rechazado"}
                       </Badge>
                       <div className="text-left">
-                        <p className="font-medium text-sm text-gray-900">Pedido #{o.id}</p>
+                        <p className="font-medium text-sm text-gray-900">
+                          {o.remitoNumber ? <span className="text-blue-600">Remito #{o.remitoNumber}</span> : `Pedido #${o.id}`}
+                        </p>
                         <p className="text-xs text-gray-500">{fmt(o.createdAt)} - {o.paymentType} {o.shippingType !== "none" && `- ${o.shippingType === "express" ? "Express" : "Gratis"}`}</p>
                       </div>
                     </div>
@@ -375,6 +380,21 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                           </div>
                         );
                       })()}
+
+                      {/* Metodo de pago editable */}
+                      {o.status === "pending" && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 flex items-center gap-3">
+                          <span className="text-xs text-gray-500 font-medium">Metodo de pago:</span>
+                          <select
+                            value={o.paymentType}
+                            onChange={e => { if (confirm(`Cambiar a ${e.target.value}? Se recalculan todos los precios.`)) chPay.mutate({ orderId: o.id, paymentType: e.target.value as "efectivo" | "transferencia" }); }}
+                            className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900"
+                          >
+                            <option value="efectivo">Efectivo -30%</option>
+                            <option value="transferencia">Transferencia -25%</option>
+                          </select>
+                        </div>
+                      )}
 
                       {/* Direccion */}
                       {o.notes && <p className="text-sm text-gray-500 mb-3 bg-gray-50 p-2 rounded flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {o.notes}</p>}

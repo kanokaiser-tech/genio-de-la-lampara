@@ -55,6 +55,7 @@ export const orders = mysqlTable("orders", {
   status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
   paymentType: mysqlEnum("paymentType", ["efectivo", "transferencia"]).notNull(),
   shippingType: mysqlEnum("shippingType", ["none", "express", "free"]).default("none").notNull(),
+  remitoNumber: varchar("remitoNumber", { length: 20 }),
   notes: text("notes"),
   totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }).notNull(),
   webhookSent: boolean("webhookSent").default(false).notNull(),

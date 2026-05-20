@@ -280,12 +280,67 @@ export const orderRouter = createRouter({
     }),
 
   /* ================================================================
-     ADMIN: Aprobar pedido (con descuento de stock en Tiendanube)
+     ADMIN: Cambiar metodo de pago de un pedido pendiente
+     ================================================================ */
+  updatePaymentType: adminQuery
+    .input(z.object({ orderId: z.number(), paymentType: z.enum(["efectivo", "transferencia"]) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId));
+      if (!order || order.status !== "pending") throw new Error("Solo se pueden editar pedidos pendientes");
+
+      // Obtener todos los items del pedido
+      const items = await db.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
+
+      // Recalcular precios con el nuevo metodo de pago
+      const priceField = input.paymentType === "efectivo" ? "priceCash30" : "priceTransfer25";
+      let newTotal = 0;
+
+      for (const item of items) {
+        // Obtener producto para el precio actualizado
+        const [product] = await db.select().from(products).where(eq(products.id, item.productId));
+        if (!product) continue;
+
+        const newPrice = Number(product[priceField as keyof typeof product]);
+        const newSubtotal = newPrice * item.quantity;
+
+        await db.update(orderItems)
+          .set({ price: newPrice.toFixed(2), subtotal: newSubtotal.toFixed(2) })
+          .where(eq(orderItems.id, item.id));
+
+        newTotal += newSubtotal;
+      }
+
+      // Sumar envio si aplica
+      if (order.shippingType === "express") {
+        newTotal += 5000;
+      }
+
+      // Actualizar pedido
+      await db.update(orders)
+        .set({ paymentType: input.paymentType, totalAmount: newTotal.toFixed(2) })
+        .where(eq(orders.id, input.orderId));
+
+      return { success: true, newTotal, paymentType: input.paymentType };
+    }),
+
+  /* ================================================================
+     ADMIN: Aprobar pedido (con descuento de stock en Tiendanube + remito)
      ================================================================ */
   approve: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+
+      // Generar numero de remito (siguiente disponible)
+      let remitoNumber: string;
+      try {
+        const result = await db.execute(`SELECT MAX(CAST(remitoNumber AS UNSIGNED)) as maxRemito FROM orders WHERE remitoNumber IS NOT NULL` as any);
+        const maxRemito = Number((result as any)[0]?.[0]?.maxRemito ?? 0);
+        remitoNumber = String(maxRemito + 1).padStart(5, "0");
+      } catch {
+        remitoNumber = "00001";
+      }
 
       // Obtener items del pedido con datos de productos
       const items = await db.select().from(orderItems)
@@ -335,8 +390,8 @@ export const orderRouter = createRouter({
           .where(eq(products.id, product.id));
       }
 
-      // Actualizar estado del pedido
-      await db.update(orders).set({ status: "approved" })
+      // Actualizar estado del pedido con numero de remito
+      await db.update(orders).set({ status: "approved", remitoNumber })
         .where(eq(orders.id, input.id));
 
       // === MONEDAS DE ORO: calcular y asignar al revendedor ===
