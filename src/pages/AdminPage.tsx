@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User, History } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -81,6 +81,13 @@ export default function AdminPage() {
   const chPay = trpc.order.updatePaymentType.useMutation({
     onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.detail.invalidate(); },
   });
+  const togglePaid = trpc.order.togglePaid.useMutation({
+    onSuccess: () => { utils.order.dailyOrders.invalidate(); utils.order.myOrdersAsAdmin.invalidate(); },
+  });
+  const closeDaily = trpc.order.closeDaily.useMutation({
+    onSuccess: () => { utils.order.dailyOrders.invalidate(); utils.order.closureHistory.invalidate(); utils.order.myOrdersAsAdmin.invalidate(); },
+  });
+  const { data: closureHistory } = trpc.order.closureHistory.useQuery();
   const clearHistory = trpc.order.clearHistory.useMutation({
     onSuccess: () => {
       utils.order.salesByAdmin.invalidate();
@@ -117,17 +124,20 @@ export default function AdminPage() {
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-  const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "", parentId: user.parentId ? String(user.parentId) : "" }); };
+  // Query: pedidos del dia + pendientes
+  const { data: dailyOrders, isLoading: ld } = trpc.order.dailyOrders.useQuery();
 
-const openPassDialog = (user: any) => { setChangePassUser({ id: user.id, name: user.name }); setNewPassword(""); setPassDialogOpen(true); };
-const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null); setNewPassword(""); };
+  const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "", parentId: user.parentId ? String(user.parentId) : "" }); };
+  const openPassDialog = (user: any) => { setChangePassUser({ id: user.id, name: user.name }); setNewPassword(""); setPassDialogOpen(true); };
+  const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null); setNewPassword(""); };
 
   // Tabs disponibles segun rol
   const tabs = [
     { value: "products", label: `Productos (${products?.length ?? 0})`, icon: Package },
     { value: "revendedores", label: `Revendedores (${revs?.length ?? 0})`, icon: Users },
     ...(isSuperadmin ? [{ value: "admins", label: `Admins (${admins?.length ?? 0})`, icon: Users }] : []),
-    { value: "orders", label: `Pedidos (${orders?.length ?? 0})`, icon: ClipboardList },
+    { value: "orders", label: `Caja (${dailyOrders?.length ?? 0})`, icon: ClipboardList },
+    { value: "history", label: `Historial`, icon: Calendar },
     ...(isSuperadmin ? [{ value: "import", label: "Importar", icon: RefreshCw }] : []),
     ...(isSuperadmin ? [{ value: "settings", label: "Config", icon: Settings }] : []),
     ...(isSuperadmin ? [{ value: "superadmins", label: `SuperAdmins (${superadmins?.length ?? 0})`, icon: Shield }] : []),
@@ -344,29 +354,51 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
           </TabsContent>
         )}
 
-        {/* ORDERS */}
-        <TabsContent value="orders" className="space-y-3">
-          {lo ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : orders?.length === 0 ? <div className="text-center py-20 text-gray-500"><ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No hay pedidos</p></div> : (
-            orders?.map(o => {
-              const isExp = expanded === o.id;
+        {/* ORDERS — Cierre de caja */}
+        <TabsContent value="orders" className="space-y-4">
+          {/* Header con cierre de caja */}
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Caja del dia</h2>
+              <p className="text-xs text-gray-500">Pedidos de hoy + pendientes de cobro de dias anteriores</p>
+            </div>
+            {dailyOrders && dailyOrders.length > 0 && (
+              <Button onClick={() => { if (confirm(`Cerrar caja con ${dailyOrders.length} pedidos?`)) closeDaily.mutate({}); }} disabled={closeDaily.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
+                {closeDaily.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4 mr-1" />} Cerrar caja
+              </Button>
+            )}
+          </div>
+
+          {ld ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : dailyOrders?.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No hay pedidos para hoy</p>
+              <p className="text-xs text-gray-400 mt-1">Los pedidos aprobados del dia aparecen aqui</p>
+            </div>
+          ) : (
+            dailyOrders?.map(o => {
               const isEditing = editingOrder === o.id;
               return (
-                <div key={o.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                  <button onClick={() => { setExpanded(isExp ? null : o.id); setEditingOrder(isEditing ? null : o.id); }} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
-                    <div className="flex items-center gap-4">
-                      <Badge className={o.status === "pending" ? "bg-amber-100 text-amber-700 border-amber-300" : o.status === "approved" ? "bg-green-100 text-green-700 border-green-300" : "bg-red-100 text-red-700 border-red-300"}>
-                        {o.status === "pending" ? "Pendiente" : o.status === "approved" ? "Aprobado" : "Rechazado"}
-                      </Badge>
+                <div key={o.id} className={`bg-white border rounded-xl overflow-hidden shadow-sm ${(o as any).isOld ? "border-orange-200" : "border-gray-200"}`}>
+                  <button onClick={() => setEditingOrder(isEditing ? null : o.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      {/* Estado pago */}
+                      {o.status === "approved" && (
+                        <button
+                          onClick={e => { e.stopPropagation(); togglePaid.mutate({ id: o.id }); }}
+                          className={`px-2 py-1 rounded text-xs font-bold ${o.paid ? "bg-green-100 text-green-700 border border-green-300" : "bg-red-100 text-red-700 border border-red-300"}`}
+                        >
+                          {o.paid ? "Pagado" : "Pendiente"}
+                        </button>
+                      )}
+                      {(o as any).isOld && <Badge className="bg-orange-100 text-orange-700 border-orange-300 text-xs">Dia anterior</Badge>}
                       <div className="text-left">
-                        <p className="font-medium text-sm text-gray-900">
+                        <p className="font-medium text-sm text-gray-900 flex items-center gap-2">
                           {o.remitoNumber ? <span className="text-blue-600">Remito #{o.remitoNumber}</span> : `Pedido #${o.id}`}
+                          <span className="text-xs text-gray-400 font-normal">{(o as any).revendedorName ?? "-"}</span>
                         </p>
                         <p className="text-xs text-gray-500">
-                          {fmt(o.createdAt)} - {o.paymentType}
-                          {o.shippingType !== "none" && ` - ${o.shippingType === "express" ? "Express" : "Gratis"}`}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          Rev: {(o as any).revendedorName ?? "-"} | Admin: {(o as any).adminName ?? "-"}
+                          {fmt(o.createdAt)} - {o.paymentType} {o.shippingType !== "none" && ` - ${o.shippingType === "express" ? "Express" : "Gratis"}`}
                         </p>
                       </div>
                     </div>
@@ -376,117 +408,38 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                   </button>
                   {isEditing && (
                     <div className="px-4 pb-4 border-t border-gray-100 pt-3">
-                      {/* Info del revendedor */}
+                      {/* Info revendedor */}
                       {(() => {
                         const rev = allUsers?.find(u => u.id === o.userId);
-                        const adm = allUsers?.find(u => u.id === o.adminId);
-                        return (
-                          <div className="mb-3 space-y-2">
-                            {rev && (
-                              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-center gap-2">
-                                <User className="w-4 h-4 text-blue-600" />
-                                <p className="text-sm text-blue-800"><strong>{rev.name}</strong> ({rev.email}) {rev.phone && `- ${rev.phone}`}</p>
-                              </div>
-                            )}
-                            {adm && (
-                              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2">
-                                <Shield className="w-4 h-4 text-gray-500" />
-                                <p className="text-sm text-gray-600">Admin: <strong>{adm.name}</strong> {adm.email && `(${adm.email})`}</p>
-                              </div>
-                            )}
+                        return rev && (
+                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3 flex items-center gap-2">
+                            <User className="w-4 h-4 text-blue-600" />
+                            <p className="text-sm text-blue-800"><strong>{rev.name}</strong> ({rev.email}) {rev.phone && `- ${rev.phone}`}</p>
                           </div>
                         );
                       })()}
 
-                      {/* Metodo de pago editable */}
-                      {o.status === "pending" && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 flex items-center gap-3">
-                          <span className="text-xs text-gray-500 font-medium">Metodo de pago:</span>
-                          <select
-                            value={o.paymentType}
-                            onChange={e => { if (confirm(`Cambiar a ${e.target.value}? Se recalculan todos los precios.`)) chPay.mutate({ orderId: o.id, paymentType: e.target.value as "efectivo" | "transferencia" }); }}
-                            className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900"
-                          >
-                            <option value="efectivo">Efectivo -30%</option>
-                            <option value="transferencia">Transferencia -25%</option>
-                          </select>
-                        </div>
-                      )}
-
                       {/* Direccion */}
                       {o.notes && <p className="text-sm text-gray-500 mb-3 bg-gray-50 p-2 rounded flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {o.notes}</p>}
 
-                      {/* Items del pedido */}
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos del pedido</h4>
-                      {orderDetail && orderDetail.items.length > 0 ? (
+                      {/* Items */}
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h4>
+                      {o.items && o.items.length > 0 ? (
                         <div className="space-y-2 mb-4">
-                          {orderDetail.items.map(item => (
+                          {(o.items as any[]).map((item: any) => (
                             <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm">
                               <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
                               <span className="text-blue-600 font-medium w-20 text-right">{formatPrice(item.price)}</span>
-                              {o.status === "pending" ? (
-                                <>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    defaultValue={item.quantity}
-                                    onBlur={e => {
-                                      const val = parseInt(e.target.value);
-                                      if (!isNaN(val) && val >= 1 && val !== item.quantity) {
-                                        upItem.mutate({ orderId: o.id, itemId: item.id, quantity: val });
-                                      }
-                                    }}
-                                    className="w-14 h-7 text-xs p-0 text-center bg-white border-gray-200"
-                                  />
-                                  <button onClick={() => { if (confirm('Eliminar este producto del pedido?')) rmItem.mutate({ orderId: o.id, itemId: item.id }); }} className="p-1 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                                </>
-                              ) : (
-                                <span className="text-gray-500 w-8 text-center">x{item.quantity}</span>
-                              )}
+                              <span className="text-gray-500 w-8 text-center">x{item.quantity}</span>
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        <p className="text-sm text-gray-400 mb-3">No hay productos</p>
-                      )}
+                      ) : <p className="text-sm text-gray-400 mb-3">No hay productos</p>}
 
-                      {/* Agregar producto al pedido */}
-                      {o.status === "pending" && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
-                          <p className="text-xs font-medium text-gray-500 mb-2">Agregar producto al pedido</p>
-                          <div className="flex gap-2">
-                            <select
-                              value={addProductId}
-                              onChange={e => setAddProductId(e.target.value)}
-                              className="flex-1 bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900"
-                            >
-                              <option value="">-- Seleccionar producto --</option>
-                              {products?.map(p => <option key={p.id} value={p.id}>{p.name} ({formatPrice(p.priceList)}) - Stock: {p.stock ?? 0}</option>)}
-                            </select>
-                            <Input type="number" min={1} value={addQty} onChange={e => setAddQty(e.target.value)} className="w-16 h-8 text-xs bg-white border-gray-200" />
-                            <Button size="sm" onClick={() => { if (!addProductId) return; addItem.mutate({ orderId: o.id, productId: Number(addProductId), quantity: Number(addQty) || 1 }); }} disabled={!addProductId || addItem.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
-                              <Plus className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Total */}
-                      <div className="flex justify-between font-bold text-sm mb-3">
-                        <span className="text-gray-900">Total del pedido</span>
-                        <span className="text-blue-600">{formatPrice(o.totalAmount)}</span>
-                      </div>
-
-                      {/* Botones accion */}
-                      {o.status === "pending" && (
+                      {/* Boton anular — solo superadmin */}
+                      {o.status === "approved" && isSuperadmin && (
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700 text-white">Aprobar y generar PDF</Button>
-                          <Button size="sm" variant="outline" onClick={() => { if (confirm('Rechazar este pedido? Se devolvera el stock.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">Rechazar</Button>
-                        </div>
-                      )}
-                      {o.status === "approved" && (
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => { if (confirm('ANULAR este pedido aprobado? Se devolvera el stock a Tiendanube y se revertiran las monedas de oro.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
+                          <Button size="sm" variant="outline" onClick={() => { if (confirm('ANULAR? Se devuelve stock a Tiendanube y monedas.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
                             <Trash2 className="w-3.5 h-3.5 mr-1" /> Anular pedido
                           </Button>
                         </div>
@@ -496,6 +449,34 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                 </div>
               );
             })
+          )}
+        </TabsContent>
+
+        {/* HISTORY — Historial de cierres */}
+        <TabsContent value="history" className="space-y-4">
+          <h2 className="text-lg font-bold text-gray-900 mb-2">Historial de Cierres</h2>
+          {(!closureHistory || closureHistory.length === 0) ? (
+            <div className="text-center py-16 text-gray-500">
+              <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No hay cierres registrados</p>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="hidden md:grid grid-cols-[1fr,100px,80px,80px,80px,80px,140px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span>Fecha</span><span className="text-right">Pedidos</span><span className="text-right">Pagados</span><span className="text-right">Pend.</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-right">Total</span>
+              </div>
+              {closureHistory.map((c: any) => (
+                <div key={c.id} className="grid grid-cols-[1fr,100px,80px,80px,80px,80px,140px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                  <span className="text-gray-900">{new Date(c.createdAt).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  <span className="text-right font-medium">{c.totalOrders}</span>
+                  <span className="text-right text-green-600">{c.paidOrders}</span>
+                  <span className="text-right text-red-600">{c.pendingOrders}</span>
+                  <span className="text-right">{formatPrice(c.totalCash)}</span>
+                  <span className="text-right">{formatPrice(c.totalTransfer)}</span>
+                  <span className="text-right font-bold text-blue-600">{formatPrice(c.totalAmount)}</span>
+                </div>
+              ))}
+            </div>
           )}
         </TabsContent>
 

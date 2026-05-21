@@ -56,6 +56,8 @@ export const orders = mysqlTable("orders", {
   paymentType: mysqlEnum("paymentType", ["efectivo", "transferencia"]).notNull(),
   shippingType: mysqlEnum("shippingType", ["none", "express", "free"]).default("none").notNull(),
   remitoNumber: varchar("remitoNumber", { length: 20 }),
+  paid: boolean("paid").default(false).notNull(),
+  closed: boolean("closed").default(false).notNull(),
   notes: text("notes"),
   totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }).notNull(),
   webhookSent: boolean("webhookSent").default(false).notNull(),

@@ -455,12 +455,29 @@ export const orderRouter = createRouter({
     }),
 
   /* ================================================================
-     ADMIN: Rechazar pedido (devuelve stock a Tiendanube y local)
+     ADMIN: Rechazar pedido pendiente (devuelve stock a Tiendanube y local)
+     Superadmin puede anular pedidos aprobados tambien
      ================================================================ */
   reject: adminQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
+
+      // Verificar que el pedido existe
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.id));
+      if (!order) throw new Error("Pedido no encontrado");
+
+      const isSuper = ctx.user.role === "superadmin";
+
+      // Solo superadmin puede anular pedidos aprobados
+      if (order.status === "approved" && !isSuper) {
+        throw new Error("Solo el superadmin puede anular pedidos aprobados");
+      }
+
+      // Solo se pueden rechazar/anular pedidos aprobados o pendientes
+      if (order.status !== "pending" && order.status !== "approved") {
+        throw new Error("El pedido ya fue rechazado");
+      }
 
       // Obtener items del pedido
       const items = await db.select().from(orderItems)
@@ -536,7 +553,6 @@ export const orderRouter = createRouter({
       }
 
       // Si el pedido ya estaba aprobado, revertir las monedas de oro ganadas
-      const [order] = await db.select().from(orders).where(eq(orders.id, input.id));
       if (order && order.status === "approved") {
         try {
           const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
@@ -695,5 +711,141 @@ export const orderRouter = createRouter({
     });
 
     return result;
+  }),
+
+  /* ================================================================
+     ADMIN: Marcar pedido como pagado / pendiente
+     ================================================================ */
+  togglePaid: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.id));
+      if (!order || order.status !== "approved") throw new Error("Solo pedidos aprobados");
+
+      const newPaid = !order.paid;
+      await db.update(orders).set({ paid: newPaid }).where(eq(orders.id, input.id));
+      return { paid: newPaid };
+    }),
+
+  /* ================================================================
+     ADMIN: Listar pedidos del dia + pendientes de dias anteriores
+     ================================================================ */
+  dailyOrders: adminQuery.query(async () => {
+    const db = getDb();
+
+    // Obtener inicio del dia actual
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Pedidos aprobados de HOY (sin cerrar)
+    const todayOrders = await db.select().from(orders)
+      .where(
+        and(
+          eq(orders.status, "approved"),
+          eq(orders.closed, false),
+          gte(orders.createdAt, todayStart)
+        )
+      )
+      .orderBy(desc(orders.createdAt));
+
+    // Pedidos aprobados de DIAS ANTERIORES que estan pendientes de pago
+    const oldPending = await db.select().from(orders)
+      .where(
+        and(
+          eq(orders.status, "approved"),
+          eq(orders.paid, false),
+          eq(orders.closed, false),
+          sql`${orders.createdAt} < ${todayStart}`
+        )
+      )
+      .orderBy(desc(orders.createdAt));
+
+    // Combinar y obtener datos de usuarios
+    const allOrders = [...todayOrders, ...oldPending];
+    if (allOrders.length === 0) return [];
+
+    const userIds = [...new Set(allOrders.map(o => o.userId))];
+    const allUsers = await db.select().from(users).where(sql`${users.id} IN (${userIds.join(",")})`);
+    const userById: Record<number, typeof allUsers[0]> = {};
+    for (const u of allUsers) userById[u.id] = u;
+
+    // Obtener items
+    const orderIds = allOrders.map(o => o.id);
+    const allItems = await db.select().from(orderItems);
+    const itemsFiltered = allItems.filter(item => orderIds.includes(item.orderId));
+    const itemsByOrder: Record<number, typeof allItems> = {};
+    for (const item of itemsFiltered) {
+      if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+      itemsByOrder[item.orderId].push(item);
+    }
+
+    return allOrders.map(o => ({
+      ...o,
+      revendedorName: userById[o.userId]?.name ?? "Desconocido",
+      revendedorEmail: userById[o.userId]?.email ?? "",
+      items: itemsByOrder[o.id] || [],
+      isOld: new Date(o.createdAt) < todayStart,
+    }));
+  }),
+
+  /* ================================================================
+     ADMIN: Cerrar caja del dia
+     ================================================================ */
+  closeDaily: adminQuery
+    .input(z.object({ note: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+
+      // Obtener pedidos abiertos (approved, no cerrados)
+      const openOrders = await db.select().from(orders)
+        .where(and(eq(orders.status, "approved"), eq(orders.closed, false)));
+
+      if (openOrders.length === 0) throw new Error("No hay pedidos para cerrar");
+
+      // Calcular totales
+      let totalCash = 0;
+      let totalTransfer = 0;
+      let paidCount = 0;
+      let pendingCount = 0;
+
+      for (const order of openOrders) {
+        if (order.paymentType === "efectivo") totalCash += Number(order.totalAmount);
+        else totalTransfer += Number(order.totalAmount);
+
+        if (order.paid) paidCount++;
+        else pendingCount++;
+      }
+
+      const totalAmount = openOrders.reduce((s, o) => s + Number(o.totalAmount), 0);
+
+      // Crear cierre
+      await db.execute(
+        `INSERT INTO dailyClosures (adminId, totalAmount, totalOrders, paidOrders, pendingOrders, totalCash, totalTransfer) VALUES (${ctx.user.id}, ${totalAmount.toFixed(2)}, ${openOrders.length}, ${paidCount}, ${pendingCount}, ${totalCash.toFixed(2)}, ${totalTransfer.toFixed(2)})` as any
+      );
+
+      // Marcar todos los pedidos como cerrados
+      const orderIds = openOrders.map(o => o.id);
+      await db.execute(`UPDATE orders SET closed = TRUE WHERE id IN (${orderIds.join(",")})` as any);
+
+      return {
+        totalAmount,
+        totalOrders: openOrders.length,
+        paidCount,
+        pendingCount,
+        totalCash,
+        totalTransfer,
+      };
+    }),
+
+  /* ================================================================
+     ADMIN: Historial de cierres de caja
+     ================================================================ */
+  closureHistory: adminQuery.query(async () => {
+    const db = getDb();
+    const closures = await db.execute(
+      `SELECT d.*, u.name as adminName FROM dailyClosures d JOIN users u ON d.adminId = u.id ORDER BY d.createdAt DESC LIMIT 50` as any
+    );
+    return (closures as any)[0] ?? [];
   }),
 });
