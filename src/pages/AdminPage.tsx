@@ -481,7 +481,14 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                       {o.status === "pending" && (
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => appr.mutate({ id: o.id })} className="bg-green-600 hover:bg-green-700 text-white">Aprobar y generar PDF</Button>
-                          <Button size="sm" variant="outline" onClick={() => rej.mutate({ id: o.id })} className="border-red-300 text-red-600 hover:bg-red-50">Rechazar</Button>
+                          <Button size="sm" variant="outline" onClick={() => { if (confirm('Rechazar este pedido? Se devolvera el stock.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">Rechazar</Button>
+                        </div>
+                      )}
+                      {o.status === "approved" && (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => { if (confirm('ANULAR este pedido aprobado? Se devolvera el stock a Tiendanube y se revertiran las monedas de oro.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
+                            <Trash2 className="w-3.5 h-3.5 mr-1" /> Anular pedido
+                          </Button>
                         </div>
                       )}
                     </div>

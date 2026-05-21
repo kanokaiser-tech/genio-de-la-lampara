@@ -455,15 +455,124 @@ export const orderRouter = createRouter({
     }),
 
   /* ================================================================
-     ADMIN: Rechazar pedido
+     ADMIN: Rechazar pedido (devuelve stock a Tiendanube y local)
      ================================================================ */
   reject: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
+
+      // Obtener items del pedido
+      const items = await db.select().from(orderItems)
+        .where(eq(orderItems.orderId, input.id));
+
+      // Obtener configuracion de Tiendanube
+      const [s] = await db.select().from(settings).limit(1);
+
+      // Devolver stock a Tiendanube y local
+      for (const item of items) {
+        if (!item.tiendanubeProductId) continue;
+
+        // Obtener producto local
+        const prodRows = await db.select().from(products)
+          .where(eq(products.tiendanubeId, item.tiendanubeProductId));
+        if (prodRows.length === 0) continue;
+        const product = prodRows[0];
+
+        // Calcular nuevo stock local (devolvemos lo que se desconto)
+        const restoredStock = (product.stock ?? 0) + item.quantity;
+
+        // Actualizar stock local
+        await db.update(products).set({ stock: restoredStock })
+          .where(eq(products.id, product.id));
+
+        // Devolver stock a Tiendanube
+        if (s?.tiendanubeApiToken && s?.tiendanubeStoreId && product.tiendanubeVariantId) {
+          try {
+            // Primero obtener stock actual de Tiendanube
+            const getResponse = await fetch(
+              `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}/variants/${product.tiendanubeVariantId}`,
+              {
+                method: "GET",
+                headers: {
+                  "Authentication": `bearer ${s.tiendanubeApiToken}`,
+                  "User-Agent": "Portal-Revendedores/1.0",
+                },
+              }
+            );
+
+            let currentTnStock = 0;
+            if (getResponse.ok) {
+              const variantData = await getResponse.json() as any;
+              currentTnStock = variantData.stock ?? 0;
+            }
+
+            const newTnStock = currentTnStock + item.quantity;
+
+            // Actualizar Tiendanube con el stock restaurado
+            const putResponse = await fetch(
+              `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}/variants/${product.tiendanubeVariantId}`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authentication": `bearer ${s.tiendanubeApiToken}`,
+                  "User-Agent": "Portal-Revendedores/1.0",
+                },
+                body: JSON.stringify({ stock: newTnStock }),
+              }
+            );
+
+            if (!putResponse.ok) {
+              const errorText = await putResponse.text();
+              console.error(`[Tiendanube Reject] ERROR product ${item.tiendanubeProductId}: ${putResponse.status} - ${errorText}`);
+            } else {
+              console.log(`[Tiendanube Reject] OK stock restored for product ${item.tiendanubeProductId}: ${currentTnStock} → ${newTnStock}`);
+            }
+          } catch (err: any) {
+            console.error(`[Tiendanube Reject] FETCH ERROR product ${item.tiendanubeProductId}:`, err.message);
+          }
+        }
+      }
+
+      // Si el pedido ya estaba aprobado, revertir las monedas de oro ganadas
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.id));
+      if (order && order.status === "approved") {
+        try {
+          const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+
+          // Calcular monedas que se ganaron (para revertirlas)
+          const orderTotal = Number(order.totalAmount);
+          const paymentType = order.paymentType as "efectivo" | "transferencia";
+          const earnedCoins = calculateGoldCoins(orderTotal, paymentType);
+
+          if (earnedCoins > 0) {
+            // Verificar que el usuario tenga suficientes monedas para quitar
+            const [userRow] = await db.select({ goldCoins: users.goldCoins }).from(users).where(eq(users.id, order.userId));
+            const coinsToRemove = Math.min(earnedCoins, userRow?.goldCoins ?? 0);
+
+            if (coinsToRemove > 0) {
+              await db.insert(goldCoinTransactions).values({
+                userId: order.userId,
+                orderId: order.id,
+                type: "spent",
+                amount: -coinsToRemove,
+                description: `Revertidas por anulacion de pedido #${order.id}`,
+                monthKey,
+              });
+              await db.execute(sql`UPDATE users SET goldCoins = GREATEST(0, goldCoins - ${coinsToRemove}) WHERE id = ${order.userId}`);
+            }
+          }
+        } catch (err: any) {
+          console.error(`[GoldCoins Revert] ERROR:`, err.message);
+        }
+      }
+
+      // Marcar pedido como rechazado
       await db.update(orders).set({ status: "rejected" })
         .where(eq(orders.id, input.id));
-      return { success: true };
+
+      return { success: true, restoredItems: items.length };
     }),
 
   /* ================================================================
