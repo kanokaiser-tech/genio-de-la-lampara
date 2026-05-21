@@ -39,6 +39,9 @@ export default function OrdersPage() {
   const deleteOrder = trpc.order.delete.useMutation({
     onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); setConfirmDelete(null); },
   });
+  const togglePaid = trpc.order.togglePaid.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); },
+  });
 
   const orders: OrderWithItems[] = isAdmin ? (adminOrders ?? []) : (myOrders ?? []);
 
@@ -46,9 +49,9 @@ export default function OrdersPage() {
   const filtered = filter === "all" ? orders : orders.filter(o => o.status === filter);
 
   const statusBadge = (s: string) => {
-    if (s === "pending") return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30"><Clock className="w-3 h-3 mr-1" /> Pendiente</Badge>;
-    if (s === "approved") return <Badge className="bg-green-500/10 text-green-500 border-green-500/30"><CheckCircle className="w-3 h-3 mr-1" /> Aprobado</Badge>;
-    return <Badge className="bg-red-500/10 text-red-500 border-red-500/30"><XCircle className="w-3 h-3 mr-1" /> Rechazado</Badge>;
+    if (s === "pending") return <Badge className="bg-amber-100 text-amber-700 border-amber-300"><Clock className="w-3 h-3 mr-1" /> Pendiente</Badge>;
+    if (s === "approved") return <Badge className="bg-green-100 text-green-700 border-green-300"><CheckCircle className="w-3 h-3 mr-1" /> Aprobado</Badge>;
+    return <Badge className="bg-red-100 text-red-700 border-red-300"><XCircle className="w-3 h-3 mr-1" /> Rechazado</Badge>;
   };
 
   const fmt = (d: Date | string) => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -61,16 +64,16 @@ export default function OrdersPage() {
   };
 
   if (isLoading || (isAdmin && loadingAdmin)) {
-    return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-yellow-500 animate-spin" /></div>;
+    return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-blue-600 animate-spin" /></div>;
   }
 
   if (orders.length === 0) {
-    return <div className="text-center py-20 text-zinc-500"><Package className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No hay pedidos</p></div>;
+    return <div className="text-center py-20 text-gray-500"><Package className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No hay pedidos</p></div>;
   }
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">{isAdmin ? "Pedidos de mis Revendedores" : "Mis Pedidos"}</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-4">{isAdmin ? "Pedidos de mis Revendedores" : "Mis Pedidos"}</h1>
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -80,8 +83,8 @@ export default function OrdersPage() {
             onClick={() => setFilter(f)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               filter === f
-                ? "bg-yellow-500 text-black"
-                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                ? "bg-blue-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:border-blue-300 hover:text-blue-600"
             }`}
           >
             {f === "all" ? "Todos" : f === "pending" ? "Pendientes" : f === "approved" ? "Aprobados" : "Rechazados"}
@@ -94,35 +97,40 @@ export default function OrdersPage() {
         {filtered.map(order => {
           const isExp = expanded === order.id;
           return (
-            <div key={order.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div key={order.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
               {/* Header */}
-              <button onClick={() => setExpanded(isExp ? null : order.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-zinc-800/50">
+              <button onClick={() => setExpanded(isExp ? null : order.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
                 <div className="flex items-center gap-3">
                   {statusBadge(order.status)}
                   <div className="text-left">
-                    <p className="font-medium text-sm">Pedido #{order.id}</p>
-                    <p className="text-xs text-zinc-400">{fmt(order.createdAt)} — {order.paymentType === "efectivo" ? "Efectivo -30%" : "Transferencia -25%"}</p>
+                    <p className="font-medium text-sm text-gray-900">
+                      {order.remitoNumber ? `Remito #${order.remitoNumber}` : `Pedido #${order.id}`}
+                      {isAdmin && (order as any).revendedorName && (
+                        <span className="text-gray-400 font-normal ml-2">{(order as any).revendedorName}</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-500">{fmt(order.createdAt)} — {order.paymentType === "efectivo" ? "Efectivo -30%" : "Transferencia -25%"}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="font-bold text-yellow-500">{formatPrice(order.totalAmount)}</span>
-                  {isExp ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
+                  <span className="font-bold text-blue-600">{formatPrice(order.totalAmount)}</span>
+                  {isExp ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                 </div>
               </button>
 
               {/* Expanded details */}
               {isExp && (
-                <div className="px-4 pb-4 border-t border-zinc-800 pt-3">
+                <div className="px-4 pb-4 border-t border-gray-100 pt-3">
                   {/* Revendedor info (solo admin) */}
                   {isAdmin && "revendedorName" in order && (
-                    <div className="bg-zinc-800/50 rounded-lg p-3 mb-3 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                        <User className="w-4 h-4 text-yellow-500" />
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
+                        <User className="w-4 h-4 text-blue-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-zinc-200 truncate">{(order as any).revendedorName}</p>
+                        <p className="text-sm font-medium text-gray-900 truncate">{(order as any).revendedorName}</p>
                         {(order as any).revendedorPhone && (
-                          <p className="text-xs text-zinc-400 flex items-center gap-1">
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
                             <Phone className="w-3 h-3" /> {(order as any).revendedorPhone}
                           </p>
                         )}
@@ -130,38 +138,54 @@ export default function OrdersPage() {
                     </div>
                   )}
 
+                  {/* Boton Pagado/Pendiente (solo admin, pedidos aprobados) */}
+                  {isAdmin && order.status === "approved" && (
+                    <div className="mb-3">
+                      <button
+                        onClick={() => togglePaid.mutate({ id: order.id })}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                          order.paid
+                            ? "bg-green-100 text-green-700 border border-green-300 hover:bg-green-200"
+                            : "bg-red-100 text-red-700 border border-red-300 hover:bg-red-200"
+                        }`}
+                      >
+                        {order.paid ? "Pagado" : "Pendiente de cobro"}
+                      </button>
+                    </div>
+                  )}
+
                   {/* Productos */}
-                  <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Productos</h4>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h4>
                   <div className="space-y-1 mb-3">
                     {(order as any).items?.map((item: any) => (
-                      <div key={item.id} className="flex justify-between items-center py-1.5 text-sm border-b border-zinc-800/50 last:border-0">
-                        <span className="flex-1 truncate text-zinc-300">{item.productName}</span>
-                        <span className="text-zinc-500 w-12 text-center">x{item.quantity}</span>
-                        <span className="w-20 text-right text-zinc-400">{formatPrice(item.price)} c/u</span>
-                        <span className="w-24 text-right font-medium text-zinc-200">{formatPrice(item.subtotal)}</span>
+                      <div key={item.id} className="flex justify-between items-center py-1.5 text-sm border-b border-gray-100 last:border-0">
+                        <span className="flex-1 truncate text-gray-700">{item.productName}</span>
+                        <span className="text-gray-500 w-12 text-center">x{item.quantity}</span>
+                        <span className="w-20 text-right text-gray-500">{formatPrice(item.price)} c/u</span>
+                        <span className="w-24 text-right font-medium text-gray-900">{formatPrice(item.subtotal)}</span>
                       </div>
                     ))}
-                    {!(order as any).items?.length && <p className="text-xs text-zinc-500">Sin detalle de productos</p>}
+                    {!(order as any).items?.length && <p className="text-xs text-gray-400">Sin detalle de productos</p>}
                   </div>
 
                   {/* Total */}
-                  <div className="flex justify-between items-center border-t border-zinc-700 pt-2 mb-3">
-                    <span className="font-bold">Total</span>
-                    <span className="font-bold text-yellow-500 text-lg">{formatPrice(order.totalAmount)}</span>
+                  <div className="flex justify-between items-center border-t border-gray-200 pt-2 mb-3">
+                    <span className="font-bold text-gray-900">Total</span>
+                    <span className="font-bold text-blue-600 text-lg">{formatPrice(order.totalAmount)}</span>
                   </div>
 
                   {/* Notas */}
-                  {order.notes && <p className="text-sm text-zinc-400 mb-3 bg-zinc-800/50 p-2 rounded">Notas: {order.notes}</p>}
+                  {order.notes && <p className="text-sm text-gray-500 mb-3 bg-gray-50 p-2 rounded">Direccion: {order.notes}</p>}
 
                   {/* Acciones admin */}
                   {isAdmin && (
                     <div className="flex flex-wrap gap-2">
                       {order.status === "pending" && (
                         <>
-                          <Button size="sm" onClick={() => approve.mutate({ id: order.id })} className="bg-green-600 hover:bg-green-700">
+                          <Button size="sm" onClick={() => approve.mutate({ id: order.id })} className="bg-green-600 hover:bg-green-700 text-white">
                             <CheckCircle className="w-4 h-4 mr-1" /> Aprobar
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => reject.mutate({ id: order.id })} className="border-red-600 text-red-500 hover:bg-red-600/10">
+                          <Button size="sm" variant="outline" onClick={() => reject.mutate({ id: order.id })} className="border-red-300 text-red-600 hover:bg-red-50">
                             <XCircle className="w-4 h-4 mr-1" /> Rechazar
                           </Button>
                         </>
@@ -171,7 +195,7 @@ export default function OrdersPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-blue-500 text-blue-400 hover:bg-blue-500/10"
+                        className="border-blue-300 text-blue-600 hover:bg-blue-50"
                         onClick={() => generateOrderPDF(order)}
                       >
                         <FileText className="w-4 h-4 mr-1" /> Descargar PDF
@@ -179,13 +203,13 @@ export default function OrdersPage() {
 
                       {/* Eliminar */}
                       {confirmDelete === order.id ? (
-                        <div className="flex items-center gap-2 bg-red-500/10 rounded-lg px-3 py-1">
-                          <span className="text-xs text-red-400">Seguro?</span>
-                          <Button size="sm" className="bg-red-600 hover:bg-red-700 h-7 px-2 text-xs" onClick={() => deleteOrder.mutate({ id: order.id })}>Si, eliminar</Button>
+                        <div className="flex items-center gap-2 bg-red-50 rounded-lg px-3 py-1">
+                          <span className="text-xs text-red-600">Seguro?</span>
+                          <Button size="sm" className="bg-red-600 hover:bg-red-700 h-7 px-2 text-xs text-white" onClick={() => deleteOrder.mutate({ id: order.id })}>Si, eliminar</Button>
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setConfirmDelete(null)}>Cancelar</Button>
                         </div>
                       ) : (
-                        <Button size="sm" variant="ghost" className="text-zinc-500 hover:text-red-400" onClick={() => setConfirmDelete(order.id)}>
+                        <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-500" onClick={() => setConfirmDelete(order.id)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       )}
@@ -198,7 +222,7 @@ export default function OrdersPage() {
         })}
 
         {filtered.length === 0 && (
-          <div className="text-center py-10 text-zinc-500">
+          <div className="text-center py-10 text-gray-500">
             <Filter className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p>No hay pedidos {filter !== "all" ? "con este filtro" : ""}</p>
           </div>
@@ -222,12 +246,16 @@ function generateOrderPDF(order: any) {
     doc.text(`Fecha: ${new Date(order.createdAt).toLocaleDateString("es-AR")}`, 14, 36);
     doc.text(`Pago: ${order.paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}`, 14, 42);
 
-    if (order.revendedorName) {
-      doc.text(`Revendedor: ${order.revendedorName}`, 14, 48);
-      if (order.revendedorPhone) doc.text(`Telefono: ${order.revendedorPhone}`, 14, 54);
+    if (order.remitoNumber) {
+      doc.text(`Remito: #${order.remitoNumber}`, 14, 48);
     }
 
-    let y = order.revendedorName ? 60 : 48;
+    if (order.revendedorName) {
+      doc.text(`Revendedor: ${order.revendedorName}`, 14, order.remitoNumber ? 54 : 48);
+      if (order.revendedorPhone) doc.text(`Telefono: ${order.revendedorPhone}`, 14, order.remitoNumber ? 60 : 54);
+    }
+
+    let y = order.revendedorName ? (order.remitoNumber ? 66 : 60) : (order.remitoNumber ? 54 : 48);
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.text("Producto", 14, y);
@@ -254,11 +282,23 @@ function generateOrderPDF(order: any) {
     doc.setFont("helvetica", "bold");
     doc.text(`TOTAL: $${Number(order.totalAmount).toLocaleString("es-AR")}`, 14, y);
 
+    if (order.paid) {
+      y += 6;
+      doc.setTextColor(34, 197, 94);
+      doc.text("PAGADO", 14, y);
+      doc.setTextColor(0, 0, 0);
+    } else if (order.status === "approved") {
+      y += 6;
+      doc.setTextColor(239, 68, 68);
+      doc.text("PENDIENTE DE COBRO", 14, y);
+      doc.setTextColor(0, 0, 0);
+    }
+
     if (order.notes) {
       y += 8;
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(`Notas: ${order.notes}`, 14, y);
+      doc.text(`Direccion: ${order.notes}`, 14, y);
     }
 
     doc.save(`pedido-admin-${order.id}.pdf`);
