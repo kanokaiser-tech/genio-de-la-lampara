@@ -8,6 +8,7 @@ import {
   Trash2, FileText, User, Phone, Filter
 } from "lucide-react";
 import { useState } from "react";
+import { Plus } from "lucide-react";
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -28,6 +29,7 @@ export default function OrdersPage() {
   const { data: adminOrders, isLoading: loadingAdmin } = trpc.order.myOrdersAsAdmin.useQuery(
     undefined, { enabled: isAdmin }
   );
+  const { data: products } = trpc.product.list.useQuery(undefined, { enabled: isAdmin });
 
   // Mutations
   const approve = trpc.order.approve.useMutation({
@@ -42,6 +44,24 @@ export default function OrdersPage() {
   const togglePaid = trpc.order.togglePaid.useMutation({
     onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); },
   });
+
+  // Mutations para editar pedidos pendientes
+  const updateItem = trpc.order.updateItem.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); },
+  });
+  const removeItem = trpc.order.removeItem.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); },
+  });
+  const addItem = trpc.order.addItem.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); },
+  });
+  const updatePayment = trpc.order.updatePaymentType.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); },
+  });
+
+  // Estado para agregar producto a un pedido
+  const [addProductId, setAddProductId] = useState("");
+  const [addQty, setAddQty] = useState("1");
 
   const orders: OrderWithItems[] = isAdmin ? (adminOrders ?? []) : (myOrders ?? []);
 
@@ -156,16 +176,89 @@ export default function OrdersPage() {
 
                   {/* Productos */}
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h4>
-                  <div className="space-y-1 mb-3">
-                    {(order as any).items?.map((item: any) => (
-                      <div key={item.id} className="flex justify-between items-center py-1.5 text-sm border-b border-gray-100 last:border-0">
-                        <span className="flex-1 truncate text-gray-700">{item.productName}</span>
-                        <span className="text-gray-500 w-12 text-center">x{item.quantity}</span>
-                        <span className="w-20 text-right text-gray-500">{formatPrice(item.price)} c/u</span>
-                        <span className="w-24 text-right font-medium text-gray-900">{formatPrice(item.subtotal)}</span>
-                      </div>
-                    ))}
-                    {!(order as any).items?.length && <p className="text-xs text-gray-400">Sin detalle de productos</p>}
+                  <div className="space-y-2 mb-3">
+                    {/* PEDIDO PENDIENTE + ADMIN = EDITABLE */}
+                    {isAdmin && order.status === "pending" ? (
+                      <>
+                        {(order as any).items?.map((item: any) => (
+                          <div key={item.id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2 text-sm">
+                            <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
+                            <span className="text-blue-600 font-medium w-16 text-right shrink-0">{formatPrice(item.price)}</span>
+                            {/* Cantidad +/- */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => { if (item.quantity > 1) updateItem.mutate({ orderId: order.id, itemId: item.id, quantity: item.quantity - 1 }); }}
+                                className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                              >-</button>
+                              <span className="w-8 text-center font-medium">{item.quantity}</span>
+                              <button
+                                onClick={() => { updateItem.mutate({ orderId: order.id, itemId: item.id, quantity: item.quantity + 1 }); }}
+                                className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                              >+</button>
+                            </div>
+                            <span className="w-20 text-right font-medium text-gray-900 shrink-0">{formatPrice(item.subtotal)}</span>
+                            {/* Eliminar producto */}
+                            <button
+                              onClick={() => { if (confirm(`Eliminar "${item.productName}" del pedido?`)) removeItem.mutate({ orderId: order.id, itemId: item.id }); }}
+                              className="w-7 h-7 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Agregar producto */}
+                        <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm border border-dashed border-gray-300">
+                          <select
+                            value={addProductId}
+                            onChange={e => setAddProductId(e.target.value)}
+                            className="flex-1 bg-white border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Agregar producto...</option>
+                            {products?.filter(p => Number(p.stock ?? 0) > 0).map(p => (
+                              <option key={p.id} value={p.id}>{p.name} ({p.stock} disp.)</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { if (Number(addQty) > 1) setAddQty(String(Number(addQty) - 1)); }} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">-</button>
+                            <span className="w-8 text-center font-medium">{addQty}</span>
+                            <button onClick={() => setAddQty(String(Number(addQty) + 1))} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">+</button>
+                          </div>
+                          <button
+                            onClick={() => { if (addProductId) { addItem.mutate({ orderId: order.id, productId: Number(addProductId), quantity: Number(addQty) }); setAddProductId(""); setAddQty("1"); } }}
+                            disabled={!addProductId || addItem.isPending}
+                            className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                          >
+                            {addItem.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+
+                        {/* Cambiar metodo de pago */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <span className="text-xs text-gray-500">Metodo de pago:</span>
+                          <button
+                            onClick={() => updatePayment.mutate({ orderId: order.id, paymentType: order.paymentType === "efectivo" ? "transferencia" : "efectivo" })}
+                            disabled={updatePayment.isPending}
+                            className={`px-2 py-1 rounded text-xs font-bold border transition-colors ${order.paymentType === "efectivo" ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200" : "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"}`}
+                          >
+                            {order.paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      /* PEDIDO APROBADO/RECHAZADO = SOLO LECTURA */
+                      <>
+                        {(order as any).items?.map((item: any) => (
+                          <div key={item.id} className="flex justify-between items-center py-1.5 text-sm border-b border-gray-100 last:border-0">
+                            <span className="flex-1 truncate text-gray-700">{item.productName}</span>
+                            <span className="text-gray-500 w-12 text-center">x{item.quantity}</span>
+                            <span className="w-20 text-right text-gray-500">{formatPrice(item.price)} c/u</span>
+                            <span className="w-24 text-right font-medium text-gray-900">{formatPrice(item.subtotal)}</span>
+                          </div>
+                        ))}
+                        {!(order as any).items?.length && <p className="text-xs text-gray-400">Sin detalle de productos</p>}
+                      </>
+                    )}
                   </div>
 
                   {/* Total */}
