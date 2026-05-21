@@ -30,7 +30,11 @@ if (env.isProduction) {
   serveStaticFiles(app);
 
   const port = parseInt(process.env.PORT || "3000");
-  serve({ fetch: app.fetch, port }, () => {
+  serve({ fetch: app.fetch, port }, async () => {
     console.log(`Server running on http://localhost:${port}/`);
+
+    // Iniciar sync automatico con Tiendanube cada 10 minutos
+    const { startSyncJob } = await import("./syncJob");
+    startSyncJob();
   });
 }

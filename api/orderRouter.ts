@@ -451,6 +451,12 @@ export const orderRouter = createRouter({
         }
       } catch {}
 
+      // Sync automatico con Tiendanube post-venta (actualiza stock en segundo plano)
+      try {
+        const { forceSyncAfterSale } = await import("./syncJob");
+        forceSyncAfterSale().catch(() => {});
+      } catch {}
+
       return { success: true };
     }),
 
