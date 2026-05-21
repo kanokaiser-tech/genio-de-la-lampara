@@ -367,29 +367,29 @@ export const orderRouter = createRouter({
 
         const newStock = Math.max(0, (product.stock ?? 0) - item.quantity);
 
-        // Actualizar en Tiendanube
-        if (s?.tiendanubeApiToken && s?.tiendanubeStoreId) {
+        // Actualizar en Tiendanube usando el mismo endpoint que funciona en el bot
+        if (s?.tiendanubeApiToken && s?.tiendanubeStoreId && product.tiendanubeVariantId) {
           try {
             const response = await fetch(
-              `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}`,
+              `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}/variants/${product.tiendanubeVariantId}`,
               {
                 method: "PUT",
                 headers: {
                   "Content-Type": "application/json",
                   "Authentication": `bearer ${s.tiendanubeApiToken}`,
-                  "User-Agent": "Portal-Revendedores/1.0 (genio@revendedores.com)",
+                  "User-Agent": "Portal-Revendedores/1.0",
                 },
-                body: JSON.stringify({
-                  variants: [{ id: Number(product.tiendanubeVariantId), stock: newStock }],
-                }),
+                body: JSON.stringify({ stock: newStock }),
               }
             );
             if (!response.ok) {
               const errorText = await response.text();
-              console.error(`Tiendanube API error for product ${item.tiendanubeProductId}: ${response.status} - ${errorText}`);
+              console.error(`[Tiendanube] ERROR product ${item.tiendanubeProductId}: ${response.status} - ${errorText}`);
+            } else {
+              console.log(`[Tiendanube] OK stock updated for product ${item.tiendanubeProductId}: ${product.stock} → ${newStock}`);
             }
-          } catch (err) {
-            console.error(`Tiendanube fetch error for product ${item.tiendanubeProductId}:`, err);
+          } catch (err: any) {
+            console.error(`[Tiendanube] FETCH ERROR product ${item.tiendanubeProductId}:`, err.message);
           }
         }
 
