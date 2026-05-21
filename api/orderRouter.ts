@@ -122,19 +122,17 @@ export const orderRouter = createRouter({
     // Obtener TODOS los pedidos primero
     const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
 
-    // Obtener datos de los revendedores
-    const revUsers = await db.select().from(users).where(eq(users.role, "revendedor"));
+    // Obtener datos de TODOS los usuarios (revendedores y admins)
+    const allUsers = await db.select().from(users);
 
     let myOrders;
     if (isSuper) {
       // Superadmin ve todos los pedidos
       myOrders = allOrders;
     } else {
-      // Admin normal solo ve los de sus revendedores
-      const myRevIds = new Set(
-        revUsers.filter(u => u.parentId === ctx.user.id).map(u => u.id)
-      );
-      myOrders = allOrders.filter(o => myRevIds.has(o.userId));
+      // Admin normal ve pedidos de sus revendedores Y de otros admins (para poder aprobarlos)
+      // Los pedidos que no son de sus revendedores se marcan como "de otro admin"
+      myOrders = allOrders;
     }
 
     if (myOrders.length === 0) return [];
@@ -151,15 +149,16 @@ export const orderRouter = createRouter({
       itemsByOrder[item.orderId].push(item);
     }
 
-    // Mapear revendedores por ID
-    const revById: Record<number, typeof revUsers[0]> = {};
-    for (const u of revUsers) revById[u.id] = u;
+    // Mapear usuarios por ID
+    const userById: Record<number, typeof allUsers[0]> = {};
+    for (const u of allUsers) userById[u.id] = u;
 
     return myOrders.map(o => ({
       ...o,
-      revendedorName: revById[o.userId]?.name ?? "Desconocido",
-      revendedorEmail: revById[o.userId]?.email ?? "",
-      revendedorPhone: revById[o.userId]?.phone ?? "",
+      revendedorName: userById[o.userId]?.name ?? "Desconocido",
+      revendedorEmail: userById[o.userId]?.email ?? "",
+      revendedorPhone: userById[o.userId]?.phone ?? "",
+      adminName: userById[o.adminId]?.name ?? "Sin admin",
       items: itemsByOrder[o.id] || [],
     }));
   }),
@@ -169,7 +168,7 @@ export const orderRouter = createRouter({
      ================================================================ */
   detail: adminQuery
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const db = getDb();
 
       const orderData = await db.select().from(orders)
@@ -329,8 +328,13 @@ export const orderRouter = createRouter({
      ================================================================ */
   approve: adminQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
+
+      // Cualquier admin puede aprobar cualquier pedido pendiente
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.id));
+      if (!order) throw new Error("Pedido no encontrado");
+      if (order.status !== "pending") throw new Error("El pedido no esta pendiente");
 
       // Generar numero de remito (siguiente disponible)
       let remitoNumber: string;
@@ -366,22 +370,26 @@ export const orderRouter = createRouter({
         // Actualizar en Tiendanube
         if (s?.tiendanubeApiToken && s?.tiendanubeStoreId) {
           try {
-            await fetch(
+            const response = await fetch(
               `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}`,
               {
                 method: "PUT",
                 headers: {
                   "Content-Type": "application/json",
-                  Authentication: `bearer ${s.tiendanubeApiToken}`,
-                  "User-Agent": "Portal-Revendedores/1.0",
+                  "Authentication": `bearer ${s.tiendanubeApiToken}`,
+                  "User-Agent": "Portal-Revendedores/1.0 (genio@revendedores.com)",
                 },
                 body: JSON.stringify({
                   variants: [{ id: Number(product.tiendanubeVariantId), stock: newStock }],
                 }),
               }
             );
-          } catch {
-            // Si falla la llamada a Tiendanube, seguimos con el stock local
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`Tiendanube API error for product ${item.tiendanubeProductId}: ${response.status} - ${errorText}`);
+            }
+          } catch (err) {
+            console.error(`Tiendanube fetch error for product ${item.tiendanubeProductId}:`, err);
           }
         }
 

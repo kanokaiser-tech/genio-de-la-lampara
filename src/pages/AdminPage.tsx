@@ -361,7 +361,13 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                         <p className="font-medium text-sm text-gray-900">
                           {o.remitoNumber ? <span className="text-blue-600">Remito #{o.remitoNumber}</span> : `Pedido #${o.id}`}
                         </p>
-                        <p className="text-xs text-gray-500">{fmt(o.createdAt)} - {o.paymentType} {o.shippingType !== "none" && `- ${o.shippingType === "express" ? "Express" : "Gratis"}`}</p>
+                        <p className="text-xs text-gray-500">
+                          {fmt(o.createdAt)} - {o.paymentType}
+                          {o.shippingType !== "none" && ` - ${o.shippingType === "express" ? "Express" : "Gratis"}`}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Rev: {(o as any).revendedorName ?? "-"} | Admin: {(o as any).adminName ?? "-"}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -373,10 +379,21 @@ const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null
                       {/* Info del revendedor */}
                       {(() => {
                         const rev = allUsers?.find(u => u.id === o.userId);
-                        return rev && (
-                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3 flex items-center gap-2">
-                            <User className="w-4 h-4 text-blue-600" />
-                            <p className="text-sm text-blue-800"><strong>{rev.name}</strong> ({rev.email}) {rev.phone && `- ${rev.phone}`}</p>
+                        const adm = allUsers?.find(u => u.id === o.adminId);
+                        return (
+                          <div className="mb-3 space-y-2">
+                            {rev && (
+                              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-center gap-2">
+                                <User className="w-4 h-4 text-blue-600" />
+                                <p className="text-sm text-blue-800"><strong>{rev.name}</strong> ({rev.email}) {rev.phone && `- ${rev.phone}`}</p>
+                              </div>
+                            )}
+                            {adm && (
+                              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2">
+                                <Shield className="w-4 h-4 text-gray-500" />
+                                <p className="text-sm text-gray-600">Admin: <strong>{adm.name}</strong> {adm.email && `(${adm.email})`}</p>
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
