@@ -509,30 +509,10 @@ export const orderRouter = createRouter({
         await db.update(products).set({ stock: restoredStock })
           .where(eq(products.id, product.id));
 
-        // Devolver stock a Tiendanube
+        // Devolver stock a Tiendanube (siempre, sin GET previo)
         if (s?.tiendanubeApiToken && s?.tiendanubeStoreId && product.tiendanubeVariantId) {
           try {
-            // Primero obtener stock actual de Tiendanube
-            const getResponse = await fetch(
-              `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}/variants/${product.tiendanubeVariantId}`,
-              {
-                method: "GET",
-                headers: {
-                  "Authentication": `bearer ${s.tiendanubeApiToken}`,
-                  "User-Agent": "Portal-Revendedores/1.0",
-                },
-              }
-            );
-
-            let currentTnStock = 0;
-            if (getResponse.ok) {
-              const variantData = await getResponse.json() as any;
-              currentTnStock = variantData.stock ?? 0;
-            }
-
-            const newTnStock = currentTnStock + item.quantity;
-
-            // Actualizar Tiendanube con el stock restaurado
+            // Usamos el stock local ya restaurado como fuente de verdad
             const putResponse = await fetch(
               `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${item.tiendanubeProductId}/variants/${product.tiendanubeVariantId}`,
               {
@@ -542,7 +522,7 @@ export const orderRouter = createRouter({
                   "Authentication": `bearer ${s.tiendanubeApiToken}`,
                   "User-Agent": "Portal-Revendedores/1.0",
                 },
-                body: JSON.stringify({ stock: newTnStock }),
+                body: JSON.stringify({ stock: restoredStock }),
               }
             );
 
@@ -550,7 +530,7 @@ export const orderRouter = createRouter({
               const errorText = await putResponse.text();
               console.error(`[Tiendanube Reject] ERROR product ${item.tiendanubeProductId}: ${putResponse.status} - ${errorText}`);
             } else {
-              console.log(`[Tiendanube Reject] OK stock restored for product ${item.tiendanubeProductId}: ${currentTnStock} → ${newTnStock}`);
+              console.log(`[Tiendanube Reject] OK stock restored for product ${item.tiendanubeProductId}: ${product.stock} → ${restoredStock}`);
             }
           } catch (err: any) {
             console.error(`[Tiendanube Reject] FETCH ERROR product ${item.tiendanubeProductId}:`, err.message);

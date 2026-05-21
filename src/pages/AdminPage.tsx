@@ -356,11 +356,131 @@ export default function AdminPage() {
 
         {/* ORDERS — Cierre de caja */}
         <TabsContent value="orders" className="space-y-4">
-          {/* Header con cierre de caja */}
-          <div className="flex items-center justify-between mb-2">
+          {/* ========== PENDING ORDERS (para aprobar/editar) ========== */}
+          {lo ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 text-amber-500 animate-spin" /></div>
+          ) : orders && orders.filter((o: any) => o.status === "pending").length > 0 ? (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-5 h-5 text-amber-500" />
+                <h2 className="text-lg font-bold text-gray-900">Pedidos Pendientes</h2>
+                <Badge className="bg-amber-100 text-amber-700 border-amber-300">{orders.filter((o: any) => o.status === "pending").length}</Badge>
+              </div>
+              <p className="text-xs text-gray-500 mb-2">Estos pedidos estan esperando aprobacion. Podes editarlos antes de aprobar.</p>
+              {orders.filter((o: any) => o.status === "pending").map(o => {
+                const isEditing = editingOrder === o.id;
+                return (
+                  <div key={o.id} className="bg-white border border-amber-200 rounded-xl overflow-hidden shadow-sm">
+                    <button onClick={() => setEditingOrder(isEditing ? null : o.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-amber-50/50">
+                      <div className="flex items-center gap-3">
+                        <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">Pendiente</Badge>
+                        <div className="text-left">
+                          <p className="font-medium text-sm text-gray-900 flex items-center gap-2">
+                            Pedido #{o.id}
+                            <span className="text-xs text-gray-400 font-normal">{(o as any).revendedorName ?? "-"}</span>
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {fmt(o.createdAt)} - {o.paymentType} {o.shippingType !== "none" && ` - ${o.shippingType === "express" ? "Express" : "Gratis"}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="font-bold text-blue-600">{formatPrice(o.totalAmount)}</span>
+                        <Button
+                          size="sm"
+                          onClick={e => { e.stopPropagation(); appr.mutate({ id: o.id }); }}
+                          disabled={appr.isPending}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          {appr.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                          Aprobar
+                        </Button>
+                      </div>
+                    </button>
+                    {isEditing && (
+                      <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+                        {/* Info revendedor */}
+                        {(() => {
+                          const rev = allUsers?.find(u => u.id === o.userId);
+                          return rev && (
+                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3 flex items-center gap-2">
+                              <User className="w-4 h-4 text-blue-600" />
+                              <p className="text-sm text-blue-800"><strong>{rev.name}</strong> ({rev.email}) {rev.phone && `- ${rev.phone}`}</p>
+                            </div>
+                          );
+                        })()}
+                        {o.notes && <p className="text-sm text-gray-500 mb-3 bg-gray-50 p-2 rounded flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {o.notes}</p>}
+
+                        {/* Editable items */}
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos (editables)</h4>
+                        <div className="space-y-2 mb-4">
+                          {orderDetail?.items && orderDetail.items.length > 0 ? orderDetail.items.map((item: any) => (
+                            <div key={item.id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2 text-sm">
+                              <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
+                              <span className="text-blue-600 font-medium w-20 text-right shrink-0">{formatPrice(item.price)}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={(e) => { e.stopPropagation(); if (item.quantity > 1) upItem.mutate({ orderId: o.id, itemId: item.id, quantity: item.quantity - 1 }); }} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">-</button>
+                                <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
+                                <button onClick={(e) => { e.stopPropagation(); upItem.mutate({ orderId: o.id, itemId: item.id, quantity: item.quantity + 1 }); }} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">+</button>
+                              </div>
+                              <button onClick={(e) => { e.stopPropagation(); if (confirm(`Eliminar ${item.productName}?`)) rmItem.mutate({ orderId: o.id, itemId: item.id }); }} className="w-7 h-7 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )) : <p className="text-sm text-gray-400">No hay productos</p>}
+
+                          {/* Add product */}
+                          <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm border border-dashed border-gray-300 mt-2">
+                            <select value={addProductId} onChange={e => setAddProductId(e.target.value)} className="flex-1 bg-white border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                              <option value="">Agregar producto...</option>
+                              {products?.filter(p => Number(p.stock ?? 0) > 0).map(p => (
+                                <option key={p.id} value={p.id}>{p.name} ({p.stock} disp.)</option>
+                              ))}
+                            </select>
+                            <div className="flex items-center gap-1">
+                              <button onClick={(e) => { e.stopPropagation(); if (Number(addQty) > 1) setAddQty(String(Number(addQty) - 1)); }} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">-</button>
+                              <span className="w-8 text-center font-medium text-sm">{addQty}</span>
+                              <button onClick={(e) => { e.stopPropagation(); setAddQty(String(Number(addQty) + 1)); }} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">+</button>
+                            </div>
+                            <button onClick={(e) => { e.stopPropagation(); if (addProductId) { addItem.mutate({ orderId: o.id, productId: Number(addProductId), quantity: Number(addQty) }); } }} disabled={!addProductId || addItem.isPending} className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                              {addItem.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+
+                          {/* Payment type toggle */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <span className="text-xs text-gray-500">Metodo de pago:</span>
+                            <button onClick={(e) => { e.stopPropagation(); chPay.mutate({ orderId: o.id, paymentType: o.paymentType === "efectivo" ? "transferencia" : "efectivo" }); }} className={`px-2 py-1 rounded text-xs font-bold border ${o.paymentType === "efectivo" ? "bg-blue-100 text-blue-700 border-blue-300" : "bg-green-100 text-green-700 border-green-300"}`}>
+                              {o.paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}
+                            </button>
+                          </div>
+
+                          {/* Reject */}
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); if (confirm('Rechazar pedido? Se devuelve stock.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
+                              <X className="w-3.5 h-3.5 mr-1" /> Rechazar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <div className="text-center py-6 text-gray-400 bg-gray-50 border border-gray-200 border-dashed rounded-xl">
+              <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No hay pedidos pendientes</p>
+              <p className="text-xs text-gray-400">Los pedidos nuevos de los revendedores apareceran aqui</p>
+            </div>
+          )}
+
+          {/* ========== APPROVED ORDERS (caja) ========== */}
+          <div className="flex items-center justify-between mb-2 mt-6">
             <div>
               <h2 className="text-lg font-bold text-gray-900">Caja del dia</h2>
-              <p className="text-xs text-gray-500">Pedidos de hoy + pendientes de cobro de dias anteriores</p>
+              <p className="text-xs text-gray-500">Pedidos aprobados de hoy + pendientes de cobro</p>
             </div>
             {dailyOrders && dailyOrders.length > 0 && (
               <Button onClick={() => { if (confirm(`Cerrar caja con ${dailyOrders.length} pedidos?`)) closeDaily.mutate({}); }} disabled={closeDaily.isPending} className="bg-blue-600 hover:bg-blue-700 text-white">
@@ -369,11 +489,11 @@ export default function AdminPage() {
             )}
           </div>
 
-          {ld ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : dailyOrders?.length === 0 ? (
-            <div className="text-center py-20 text-gray-500">
+          {ld ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (!dailyOrders || dailyOrders.length === 0) ? (
+            <div className="text-center py-12 text-gray-500">
               <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No hay pedidos para hoy</p>
-              <p className="text-xs text-gray-400 mt-1">Los pedidos aprobados del dia aparecen aqui</p>
+              <p>No hay pedidos aprobados para hoy</p>
+              <p className="text-xs text-gray-400 mt-1">Los pedidos aprobados apareceran aqui</p>
             </div>
           ) : (
             dailyOrders?.map(o => {
@@ -424,25 +544,112 @@ export default function AdminPage() {
 
                       {/* Items */}
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Productos</h4>
-                      {o.items && o.items.length > 0 ? (
+                      {o.status === "pending" ? (
+                        /* ===== PENDING ORDER — EDITABLE ===== */
                         <div className="space-y-2 mb-4">
-                          {(o.items as any[]).map((item: any) => (
-                            <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm">
+                          {/* Edit each item */}
+                          {orderDetail?.items && orderDetail.items.length > 0 ? orderDetail.items.map((item: any) => (
+                            <div key={item.id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2 text-sm">
                               <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
-                              <span className="text-blue-600 font-medium w-20 text-right">{formatPrice(item.price)}</span>
-                              <span className="text-gray-500 w-8 text-center">x{item.quantity}</span>
+                              <span className="text-blue-600 font-medium w-20 text-right shrink-0">{formatPrice(item.price)}</span>
+                              {/* Quantity controls */}
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); if (item.quantity > 1) upItem.mutate({ orderId: o.id, itemId: item.id, quantity: item.quantity - 1 }); }}
+                                  className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                                >-</button>
+                                <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); upItem.mutate({ orderId: o.id, itemId: item.id, quantity: item.quantity + 1 }); }}
+                                  className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                                >+</button>
+                              </div>
+                              {/* Delete item */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); if (confirm(`Eliminar ${item.productName}?`)) rmItem.mutate({ orderId: o.id, itemId: item.id }); }}
+                                className="w-7 h-7 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
-                          ))}
-                        </div>
-                      ) : <p className="text-sm text-gray-400 mb-3">No hay productos</p>}
+                          )) : <p className="text-sm text-gray-400">No hay productos</p>}
 
-                      {/* Boton anular — solo superadmin */}
-                      {o.status === "approved" && isSuperadmin && (
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => { if (confirm('ANULAR? Se devuelve stock a Tiendanube y monedas.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
-                            <Trash2 className="w-3.5 h-3.5 mr-1" /> Anular pedido
-                          </Button>
+                          {/* Add product */}
+                          <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm border border-dashed border-gray-300 mt-2">
+                            <select
+                              value={addProductId}
+                              onChange={e => setAddProductId(e.target.value)}
+                              className="flex-1 bg-white border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Agregar producto...</option>
+                              {products?.filter(p => Number(p.stock ?? 0) > 0).map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} ({p.stock} disp.)
+                                </option>
+                              ))}
+                            </select>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); if (Number(addQty) > 1) setAddQty(String(Number(addQty) - 1)); }}
+                                className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                              >-</button>
+                              <span className="w-8 text-center font-medium text-sm">{addQty}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setAddQty(String(Number(addQty) + 1)); }}
+                                className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                              >+</button>
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); if (addProductId) { addItem.mutate({ orderId: o.id, productId: Number(addProductId), quantity: Number(addQty) }); } }}
+                              disabled={!addProductId || addItem.isPending}
+                              className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                            >
+                              {addItem.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+
+                          {/* Payment type toggle */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <span className="text-xs text-gray-500">Metodo de pago:</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); chPay.mutate({ orderId: o.id, paymentType: o.paymentType === "efectivo" ? "transferencia" : "efectivo" }); }}
+                              className={`px-2 py-1 rounded text-xs font-bold border ${o.paymentType === "efectivo" ? "bg-blue-100 text-blue-700 border-blue-300" : "bg-green-100 text-green-700 border-green-300"}`}
+                            >
+                              {o.paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}
+                            </button>
+                          </div>
+
+                          {/* Reject button */}
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); if (confirm('Rechazar pedido? Se devuelve stock.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
+                              <X className="w-3.5 h-3.5 mr-1" /> Rechazar
+                            </Button>
+                          </div>
                         </div>
+                      ) : (
+                        /* ===== APPROVED ORDER — READ-ONLY ===== */
+                        <>
+                          {o.items && o.items.length > 0 ? (
+                            <div className="space-y-2 mb-4">
+                              {(o.items as any[]).map((item: any) => (
+                                <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm">
+                                  <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
+                                  <span className="text-blue-600 font-medium w-20 text-right">{formatPrice(item.price)}</span>
+                                  <span className="text-gray-500 w-8 text-center">x{item.quantity}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <p className="text-sm text-gray-400 mb-3">No hay productos</p>}
+
+                          {/* Boton anular — solo superadmin */}
+                          {o.status === "approved" && isSuperadmin && (
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => { if (confirm('ANULAR? Se devuelve stock a Tiendanube y monedas.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
+                                <Trash2 className="w-3.5 h-3.5 mr-1" /> Anular pedido
+                              </Button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
