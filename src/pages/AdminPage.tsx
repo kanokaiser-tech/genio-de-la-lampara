@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User, History } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User, History, ShoppingCart } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -127,14 +127,31 @@ export default function AdminPage() {
   // Query: pedidos del dia + pendientes
   const { data: dailyOrders, isLoading: ld } = trpc.order.dailyOrders.useQuery();
 
+  // Admin: carritos de revendedores
+  const { data: adminCarts, isLoading: lc } = trpc.cart.adminList.useQuery();
+  const adminCartUpdate = trpc.cart.adminUpdate.useMutation({
+    onSuccess: () => utils.cart.adminList.invalidate(),
+  });
+  const adminCartRemove = trpc.cart.adminRemove.useMutation({
+    onSuccess: () => utils.cart.adminList.invalidate(),
+  });
+  const adminCartAdd = trpc.cart.adminAdd.useMutation({
+    onSuccess: () => { utils.cart.adminList.invalidate(); setCartAddProductId(""); setCartAddQty("1"); },
+  });
+  const [cartAddProductId, setCartAddProductId] = useState("");
+  const [cartAddQty, setCartAddQty] = useState("1");
+  const [expandedCart, setExpandedCart] = useState<number | null>(null);
+
   const startEdit = (user: any) => { setEditing(user.id); setEditForm({ name: user.name ?? "", email: user.email ?? "", phone: user.phone ?? "", parentId: user.parentId ? String(user.parentId) : "" }); };
   const openPassDialog = (user: any) => { setChangePassUser({ id: user.id, name: user.name }); setNewPassword(""); setPassDialogOpen(true); };
   const closePassDialog = () => { setPassDialogOpen(false); setChangePassUser(null); setNewPassword(""); };
 
   // Tabs disponibles segun rol
+  const cartCount = adminCarts?.reduce((s, c) => s + c.items.length, 0) ?? 0;
   const tabs = [
     { value: "products", label: `Productos (${products?.length ?? 0})`, icon: Package },
     { value: "revendedores", label: `Revendedores (${revs?.length ?? 0})`, icon: Users },
+    { value: "carts", label: `Carritos (${cartCount})`, icon: ShoppingCart },
     ...(isSuperadmin ? [{ value: "admins", label: `Admins (${admins?.length ?? 0})`, icon: Users }] : []),
     { value: "orders", label: `Caja (${dailyOrders?.length ?? 0})`, icon: ClipboardList },
     { value: "history", label: `Historial`, icon: Calendar },
@@ -306,6 +323,103 @@ export default function AdminPage() {
               })}
               {(!revs || revs.length === 0) && <div className="text-center py-8 text-gray-500 text-sm">No hay revendedores</div>}
             </div>
+          )}
+        </TabsContent>
+
+        {/* CARRITOS — Carritos de revendedores */}
+        <TabsContent value="carts" className="space-y-4">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Carritos de Revendedores</h2>
+              <p className="text-xs text-gray-500">Aqui podes ver y modificar los carritos que los revendedores estan armando</p>
+            </div>
+          </div>
+
+          {lc ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div> : (!adminCarts || adminCarts.length === 0) ? (
+            <div className="text-center py-20 text-gray-500">
+              <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No hay carritos activos</p>
+              <p className="text-xs text-gray-400 mt-1">Los revendedores no tienen productos en sus carritos</p>
+            </div>
+          ) : (
+            adminCarts.map((cart: any) => {
+              const isExpanded = expandedCart === cart.revendedor.id;
+              const cartTotal = cart.items.reduce((sum: number, item: any) => {
+                const price = Number(item.product?.priceCash30 ?? 0);
+                return sum + price * item.quantity;
+              }, 0);
+              return (
+                <div key={cart.revendedor.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  <button onClick={() => setExpandedCart(isExpanded ? null : cart.revendedor.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <ShoppingCart className="w-5 h-5 text-blue-600" />
+                      <div className="text-left">
+                        <p className="font-medium text-sm text-gray-900">{cart.revendedor.name}</p>
+                        <p className="text-xs text-gray-500">{cart.revendedor.email} {cart.revendedor.phone && `- ${cart.revendedor.phone}`}</p>
+                      </div>
+                      <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">{cart.items.length} productos</Badge>
+                    </div>
+                    <span className="font-bold text-blue-600">{formatPrice(cartTotal)}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-2">
+                      {/* Items del carrito */}
+                      {cart.items.map((item: any) => (
+                        <div key={item.id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2 text-sm">
+                          <span className="flex-1 text-gray-900 truncate">{item.product?.name ?? "Producto desconocido"}</span>
+                          <span className="text-blue-600 font-medium w-20 text-right shrink-0">{formatPrice(item.product?.priceCash30 ?? 0)}</span>
+                          {/* Controles de cantidad */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => { if (item.quantity > 1) adminCartUpdate.mutate({ userId: cart.revendedor.id, productId: item.productId, quantity: item.quantity - 1 }); }}
+                              className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                            >-</button>
+                            <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
+                            <button
+                              onClick={() => { adminCartUpdate.mutate({ userId: cart.revendedor.id, productId: item.productId, quantity: item.quantity + 1 }); }}
+                              className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold"
+                            >+</button>
+                          </div>
+                          {/* Eliminar */}
+                          <button
+                            onClick={() => { if (confirm(`Eliminar ${item.product?.name}?`)) adminCartRemove.mutate({ userId: cart.revendedor.id, productId: item.productId }); }}
+                            className="w-7 h-7 rounded flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* Agregar producto */}
+                      <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm border border-dashed border-gray-300 mt-2">
+                        <select
+                          value={cartAddProductId}
+                          onChange={e => setCartAddProductId(e.target.value)}
+                          className="flex-1 bg-white border border-gray-300 rounded px-2 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Agregar producto...</option>
+                          {products?.filter(p => Number(p.stock ?? 0) > 0).map(p => (
+                            <option key={p.id} value={p.id}>{p.name} ({p.stock} disp.)</option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => { if (Number(cartAddQty) > 1) setCartAddQty(String(Number(cartAddQty) - 1)); }} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">-</button>
+                          <span className="w-8 text-center font-medium text-sm">{cartAddQty}</span>
+                          <button onClick={() => setCartAddQty(String(Number(cartAddQty) + 1))} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">+</button>
+                        </div>
+                        <button
+                          onClick={() => { if (cartAddProductId) adminCartAdd.mutate({ userId: cart.revendedor.id, productId: Number(cartAddProductId), quantity: Number(cartAddQty) }); }}
+                          disabled={!cartAddProductId || adminCartAdd.isPending}
+                          className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                        >
+                          {adminCartAdd.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </TabsContent>
 
