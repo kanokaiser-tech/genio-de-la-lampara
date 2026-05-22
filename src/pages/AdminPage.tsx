@@ -637,7 +637,19 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="font-bold text-blue-600">{formatPrice(o.totalAmount)}</span>
+                      {(o as any).goldCoinsUsed > 0 && (
+                        <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">
+                          <Coins className="w-3 h-3 mr-1" /> {(o as any).goldCoinsUsed}
+                        </Badge>
+                      )}
+                      <span className="font-bold text-blue-600">
+                        {(o as any).discountPesos > 0 ? (
+                          <>
+                            <span className="text-xs text-gray-400 line-through mr-1">{formatPrice(o.totalAmount)}</span>
+                            {formatPrice(Math.max(0, Number(o.totalAmount) - Number((o as any).discountPesos)))}
+                          </>
+                        ) : formatPrice(o.totalAmount)}
+                      </span>
                     </div>
                   </button>
                   {isEditing && (
@@ -783,18 +795,19 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="hidden md:grid grid-cols-[1fr,100px,80px,80px,80px,80px,140px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
-                <span>Fecha</span><span className="text-right">Pedidos</span><span className="text-right">Pagados</span><span className="text-right">Pend.</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-right">Total</span>
+              <div className="hidden md:grid grid-cols-[1fr,80px,80px,80px,120px,120px,120px,140px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span>Fecha</span><span className="text-right">Pedidos</span><span className="text-right">Pagados</span><span className="text-right">Pend.</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-right text-amber-600">Monedas</span><span className="text-right">Total Real</span>
               </div>
               {closureHistory.map((c: any) => (
-                <div key={c.id} className="grid grid-cols-[1fr,100px,80px,80px,80px,80px,140px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
+                <div key={c.id} className="grid grid-cols-[1fr,80px,80px,80px,120px,120px,120px,140px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
                   <span className="text-gray-900">{new Date(c.createdAt).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                   <span className="text-right font-medium">{c.totalOrders}</span>
                   <span className="text-right text-green-600">{c.paidOrders}</span>
                   <span className="text-right text-red-600">{c.pendingOrders}</span>
                   <span className="text-right">{formatPrice(c.totalCash)}</span>
                   <span className="text-right">{formatPrice(c.totalTransfer)}</span>
-                  <span className="text-right font-bold text-blue-600">{formatPrice(c.totalAmount)}</span>
+                  <span className="text-right font-bold text-amber-600">{c.totalDiscountCoins > 0 ? `-${formatPrice(c.totalDiscountCoins)}` : "-"}</span>
+                  <span className="text-right font-bold text-blue-600">{formatPrice(c.totalReal ?? c.totalAmount)}</span>
                 </div>
               ))}
             </div>

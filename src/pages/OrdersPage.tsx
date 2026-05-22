@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Package, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp,
-  Trash2, FileText, User, Phone, Filter
+  Trash2, FileText, User, Phone, Filter, Coins
 } from "lucide-react";
 import { useState } from "react";
 import { Plus } from "lucide-react";
@@ -261,10 +261,26 @@ export default function OrdersPage() {
                     )}
                   </div>
 
+                  {/* Descuento por monedas de oro */}
+                  {Number((order as any).goldCoinsUsed ?? 0) > 0 && (
+                    <div className="flex justify-between items-center bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Coins className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm font-medium text-amber-800">Monedas de oro usadas</span>
+                      </div>
+                      <span className="text-sm font-bold text-amber-700">{(order as any).goldCoinsUsed} monedas = -{formatPrice((order as any).discountPesos)}</span>
+                    </div>
+                  )}
+
                   {/* Total */}
                   <div className="flex justify-between items-center border-t border-gray-200 pt-2 mb-3">
                     <span className="font-bold text-gray-900">Total</span>
-                    <span className="font-bold text-blue-600 text-lg">{formatPrice(order.totalAmount)}</span>
+                    <div className="text-right">
+                      {Number((order as any).discountPesos ?? 0) > 0 && (
+                        <p className="text-xs text-gray-400 line-through">{formatPrice(order.totalAmount)}</p>
+                      )}
+                      <span className="font-bold text-blue-600 text-lg">{formatPrice(Math.max(0, Number(order.totalAmount) - Number((order as any).discountPesos ?? 0)))}</span>
+                    </div>
                   </div>
 
                   {/* Notas */}
@@ -348,7 +364,19 @@ function generateOrderPDF(order: any) {
       if (order.revendedorPhone) doc.text(`Telefono: ${order.revendedorPhone}`, 14, order.remitoNumber ? 60 : 54);
     }
 
+    // Si uso monedas de oro, mostrar en el PDF
+    const hasCoins = Number(order.goldCoinsUsed ?? 0) > 0;
+    if (hasCoins) {
+      const coinsY = order.revendedorName ? (order.remitoNumber ? 66 : 60) : (order.remitoNumber ? 54 : 48);
+      doc.setTextColor(245, 158, 11);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Monedas de oro usadas: ${order.goldCoinsUsed} = -$${Number(order.discountPesos).toLocaleString("es-AR")}`, 14, coinsY);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+    }
+
     let y = order.revendedorName ? (order.remitoNumber ? 66 : 60) : (order.remitoNumber ? 54 : 48);
+    if (hasCoins) y += 6;
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.text("Producto", 14, y);
@@ -373,15 +401,31 @@ function generateOrderPDF(order: any) {
     y += 10;
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text(`TOTAL: $${Number(order.totalAmount).toLocaleString("es-AR")}`, 14, y);
 
+    // Total con descuento por monedas
+    if (hasCoins) {
+      doc.setFontSize(10);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Subtotal: $${Number(order.totalAmount).toLocaleString("es-AR")}`, 14, y);
+      y += 5;
+      doc.setTextColor(245, 158, 11);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Descuento monedas de oro: -$${Number(order.discountPesos).toLocaleString("es-AR")}`, 14, y);
+      y += 5;
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+    }
+    doc.setFontSize(12);
+    const totalReal = Math.max(0, Number(order.totalAmount) - Number(order.discountPesos ?? 0));
+    doc.text(`TOTAL: $${totalReal.toLocaleString("es-AR")}`, 14, y);
+
+    y += 8;
     if (order.paid) {
-      y += 6;
       doc.setTextColor(34, 197, 94);
       doc.text("PAGADO", 14, y);
       doc.setTextColor(0, 0, 0);
     } else if (order.status === "approved") {
-      y += 6;
       doc.setTextColor(239, 68, 68);
       doc.text("PENDIENTE DE COBRO", 14, y);
       doc.setTextColor(0, 0, 0);

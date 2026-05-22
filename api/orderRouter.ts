@@ -34,13 +34,14 @@ export const orderRouter = createRouter({
       }
 
       const priceField = input.paymentType === "efectivo" ? "priceCash30" : "priceTransfer25";
-      let total = cartItems2.reduce((sum: number, item: any) => {
+      // Subtotal original = items + envio (SIN descontar monedas)
+      let subtotalOriginal = cartItems2.reduce((sum: number, item: any) => {
         return sum + (Number(item[priceField]) * item.quantity);
       }, 0);
 
       // Sumar envio express si aplica
       if (input.shippingType === "express") {
-        total += 5000;
+        subtotalOriginal += 5000;
       }
 
       // Aplicar descuento con monedas de oro
@@ -51,18 +52,23 @@ export const orderRouter = createRouter({
           throw new Error("Saldo insuficiente de monedas de oro");
         }
         discountPesos = coinsToPesos(input.goldCoinsUsed);
-        total = Math.max(0, total - discountPesos);
       }
 
-      // Insert order
+      // totalAmount = subtotal original (sin descontar monedas) - refleja el valor real de la venta
+      // discountPesos = descuento por monedas de oro
+      // El total a cobrar en efectivo/transferencia = totalAmount - discountPesos
+      const totalReal = Math.max(0, subtotalOriginal - discountPesos);
+
       const orderResult = await db.insert(orders).values({
         userId,
         adminId: ctx.user.parentId ?? userId,
-        totalAmount: total.toFixed(2),
+        totalAmount: subtotalOriginal.toFixed(2),
         paymentType: input.paymentType,
         shippingType: input.shippingType,
         status: "pending",
         notes: input.notes || null,
+        goldCoinsUsed: input.goldCoinsUsed,
+        discountPesos: discountPesos.toFixed(2),
         webhookSent: false,
       });
       const orderId = Number((orderResult as any)[0].insertId);
@@ -98,7 +104,7 @@ export const orderRouter = createRouter({
       // Clear cart
       await db.execute(`DELETE FROM cartItems WHERE userId = ${userId}` as any);
 
-      return { id: orderId, total, discountPesos, goldCoinsUsed: input.goldCoinsUsed };
+      return { id: orderId, total: totalReal, subtotalOriginal, discountPesos, goldCoinsUsed: input.goldCoinsUsed };
     }),
 
   /* ================================================================
@@ -794,10 +800,16 @@ export const orderRouter = createRouter({
       let totalTransfer = 0;
       let paidCount = 0;
       let pendingCount = 0;
+      let totalDiscountCoins = 0;
+      let totalReal = 0;
 
       for (const order of openOrders) {
-        if (order.paymentType === "efectivo") totalCash += Number(order.totalAmount);
-        else totalTransfer += Number(order.totalAmount);
+        const orderReal = Math.max(0, Number(order.totalAmount) - Number(order.discountPesos));
+        totalReal += orderReal;
+        totalDiscountCoins += Number(order.discountPesos);
+
+        if (order.paymentType === "efectivo") totalCash += orderReal;
+        else totalTransfer += orderReal;
 
         if (order.paid) paidCount++;
         else pendingCount++;
@@ -807,7 +819,7 @@ export const orderRouter = createRouter({
 
       // Crear cierre
       await db.execute(
-        `INSERT INTO dailyClosures (adminId, totalAmount, totalOrders, paidOrders, pendingOrders, totalCash, totalTransfer) VALUES (${ctx.user.id}, ${totalAmount.toFixed(2)}, ${openOrders.length}, ${paidCount}, ${pendingCount}, ${totalCash.toFixed(2)}, ${totalTransfer.toFixed(2)})` as any
+        `INSERT INTO dailyClosures (adminId, totalAmount, totalReal, totalDiscountCoins, totalOrders, paidOrders, pendingOrders, totalCash, totalTransfer) VALUES (${ctx.user.id}, ${totalAmount.toFixed(2)}, ${totalReal.toFixed(2)}, ${totalDiscountCoins.toFixed(2)}, ${openOrders.length}, ${paidCount}, ${pendingCount}, ${totalCash.toFixed(2)}, ${totalTransfer.toFixed(2)})` as any
       );
 
       // Marcar todos los pedidos como cerrados

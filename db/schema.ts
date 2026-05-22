@@ -60,6 +60,8 @@ export const orders = mysqlTable("orders", {
   closed: boolean("closed").default(false).notNull(),
   notes: text("notes"),
   totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }).notNull(),
+  goldCoinsUsed: int("goldCoinsUsed").default(0).notNull(),
+  discountPesos: decimal("discountPesos", { precision: 12, scale: 2 }).default("0").notNull(),
   webhookSent: boolean("webhookSent").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
@@ -121,3 +123,18 @@ export type InsertGoldCoinTransaction = typeof goldCoinTransactions.$inferInsert
 
 export type Setting = typeof settings.$inferSelect;
 export type InsertSetting = typeof settings.$inferInsert;
+
+export const dailyClosures = mysqlTable("dailyClosures", {
+  id: serial("id").primaryKey(),
+  adminId: bigint("adminId", { mode: "number", unsigned: true }).notNull(),
+  totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }).notNull(),
+  totalReal: decimal("totalReal", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalDiscountCoins: decimal("totalDiscountCoins", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalOrders: int("totalOrders").notNull(),
+  paidOrders: int("paidOrders").default(0).notNull(),
+  pendingOrders: int("pendingOrders").default(0).notNull(),
+  totalCash: decimal("totalCash", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalTransfer: decimal("totalTransfer", { precision: 12, scale: 2 }).default("0").notNull(),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
