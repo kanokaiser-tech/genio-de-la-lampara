@@ -33,6 +33,10 @@ if (env.isProduction) {
   serve({ fetch: app.fetch, port }, async () => {
     console.log(`Server running on http://localhost:${port}/`);
 
+    // Ejecutar migraciones de base de datos
+    const { runMigrations } = await import("./migrations/run_migrations");
+    await runMigrations();
+
     // Iniciar sync automatico con Tiendanube cada 10 minutos
     const { startSyncJob } = await import("./syncJob");
     startSyncJob();
