@@ -383,11 +383,11 @@ export default function ProductsPage() {
                     >
                       {/* Imagen del producto - Link a Tiendanube */}
                       <a
-                        href={p.tiendanubeId ? `https://geniodelalampara.com/productos/${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${p.tiendanubeId}/` : undefined}
+                        href={p.slug ? `https://geniodelalampara.com/productos/${p.slug}/` : undefined}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={e => { if (!p.tiendanubeId) e.preventDefault(); }}
-                        className={`relative w-full h-28 bg-gray-100 flex items-center justify-center overflow-hidden ${p.tiendanubeId ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
+                        onClick={e => { if (!p.slug) e.preventDefault(); }}
+                        className={`relative w-full h-28 bg-gray-100 flex items-center justify-center overflow-hidden ${p.slug ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
                       >
                         {p.imageUrl ? (
                           <img
