@@ -381,8 +381,14 @@ export default function ProductsPage() {
                       ref={el => { productRefs.current[p.id] = el; }}
                       className={`bg-white border rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden ${isHighlighted ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/50 scale-[1.02]" : "border-gray-200"}`}
                     >
-                      {/* Imagen del producto */}
-                      <div className="relative w-full h-28 bg-gray-100 flex items-center justify-center overflow-hidden">
+                      {/* Imagen del producto - Link a Tiendanube */}
+                      <a
+                        href={p.tiendanubeId ? `https://geniodelalampara.com/productos/${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${p.tiendanubeId}/` : undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => { if (!p.tiendanubeId) e.preventDefault(); }}
+                        className={`relative w-full h-28 bg-gray-100 flex items-center justify-center overflow-hidden ${p.tiendanubeId ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
+                      >
                         {p.imageUrl ? (
                           <img
                             src={p.imageUrl}
@@ -403,7 +409,7 @@ export default function ProductsPage() {
                         {stockNum <= 0 && (
                           <Badge className="absolute top-1.5 right-1.5 bg-red-100 text-red-600 border-red-200 text-[9px] px-1 py-0">Sin</Badge>
                         )}
-                      </div>
+                      </a>
                       <div className="p-2.5">
                         <p className="font-semibold text-xs text-gray-900 line-clamp-2 mb-1.5 leading-tight">{p.name}</p>
                         <div className="mb-2">
