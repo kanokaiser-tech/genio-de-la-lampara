@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User, History, ShoppingCart } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User, History, ShoppingCart, Search } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -104,6 +104,10 @@ export default function AdminPage() {
       setCoinAssign({ userId: "", amount: "", description: "" });
     },
   });
+  // Buscadores
+  const [searchRevs, setSearchRevs] = useState("");
+  const [searchAdmins, setSearchAdmins] = useState("");
+
   // Admin editar pedido
   const [editingOrder, setEditingOrder] = useState<number | null>(null);
   const [addProductId, setAddProductId] = useState("");
@@ -270,12 +274,26 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+          {/* Buscador de revendedores */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              placeholder="Buscar revendedor..."
+              value={searchRevs}
+              onChange={e => setSearchRevs(e.target.value)}
+              className="pl-9 bg-white border-gray-300 text-gray-900"
+            />
+          </div>
+
           {lr ? <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto" /> : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
               <div className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
                 <span>Nombre</span><span>Email</span><span>Telefono</span><span>Desc.</span><span>Admin asignado</span><span></span><span></span><span></span>
               </div>
-              {revs?.map(r => {
+              {revs?.filter(r => {
+                const q = searchRevs.toLowerCase();
+                return !q || r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q) || (r.phone ?? "").includes(q);
+              }).map(r => {
                 const assignedAdmin = admins?.find(a => a.id === r.parentId);
                 return (
                   <div key={r.id} className="grid grid-cols-[1fr,180px,100px,80px,120px,60px,60px,60px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
@@ -436,11 +454,25 @@ export default function AdminPage() {
                 <Button onClick={() => cAdmin.mutate(newAdmin)} disabled={!newAdmin.name || !newAdmin.email || !newAdmin.password} className="bg-blue-600 hover:bg-blue-700 text-white"><Plus className="w-4 h-4 mr-1" /> Crear</Button>
               </div>
             </div>
+            {/* Buscador de admins */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Buscar admin..."
+                value={searchAdmins}
+                onChange={e => setSearchAdmins(e.target.value)}
+                className="pl-9 bg-white border-gray-300 text-gray-900"
+              />
+            </div>
+
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
               <div className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
                 <span>Nombre</span><span>Email</span><span>Telefono</span><span></span><span></span><span></span>
               </div>
-              {admins?.map(a => (
+              {admins?.filter(a => {
+                const q = searchAdmins.toLowerCase();
+                return !q || a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q);
+              }).map(a => (
                 <div key={a.id} className="grid grid-cols-[1fr,200px,120px,80px,80px,80px] gap-4 px-4 py-3 border-t border-gray-100 items-center text-sm">
                   {editing === a.id ? (
                     <>

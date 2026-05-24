@@ -115,44 +115,41 @@ export default function ProductsPage() {
     <div className="max-w-6xl mx-auto">
       {/* ===== MODAL PROMO MONEDAS DE ORO ===== */}
       {showPromo && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
-            <div className="bg-yellow-500 p-6 text-center">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Coins className="w-8 h-8 text-white" />
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3">
+          <div className="bg-white rounded-xl max-w-xs w-full shadow-2xl overflow-hidden relative">
+            {/* Boton cerrar en esquina */}
+            <button
+              onClick={() => { setShowPromo(false); sessionStorage.setItem("goldPromoModal", "1"); }}
+              className="absolute top-2 right-2 z-10 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center text-white hover:bg-black/40"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="bg-yellow-500 p-3 text-center">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-1.5">
+                <Coins className="w-5 h-5 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-white">Monedas de Oro</h2>
-              <p className="text-yellow-100 text-sm mt-1">Compra y gana en cada pedido</p>
+              <h2 className="text-lg font-bold text-white leading-tight">Monedas de Oro</h2>
+              <p className="text-yellow-100 text-xs mt-0.5">Compra y gana en cada pedido</p>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                <p className="text-sm text-gray-700">
-                  Por cada compra que hagas, <strong>sumas monedas de oro</strong> que podes usar para <strong>descuentos</strong> en tus proximas compras.
+            <div className="p-3 space-y-2">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                <p className="text-xs text-gray-700 leading-tight">
+                  <strong>Sumas monedas</strong> que podes usar como <strong>descuento</strong> en tus proximas compras.
                 </p>
               </div>
-              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
-                <Zap className="w-6 h-6 text-green-600 shrink-0" />
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-2">
+                <Zap className="w-4 h-4 text-green-600 shrink-0" />
                 <div>
-                  <p className="font-bold text-green-800 text-sm">PAGA EN EFECTIVO Y SUMA DOBLE</p>
-                  <p className="text-xs text-green-600">Efectivo te da el doble de monedas</p>
+                  <p className="font-bold text-green-800 text-xs leading-tight">PAGA EN EFECTIVO Y SUMA DOBLE</p>
+                  <p className="text-[10px] text-green-600 leading-tight">1% efectivo vs 0.5% transfer</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-center text-sm">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-green-700 font-bold text-lg flex items-center justify-center gap-1"><Zap className="w-4 h-4" /> DOBLE</p>
-                  <p className="text-green-500 text-xs">Pagando en efectivo</p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <p className="text-blue-700 font-bold text-lg">NORMAL</p>
-                  <p className="text-blue-500 text-xs">Otras formas de pago</p>
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button onClick={() => { setShowPromo(false); sessionStorage.setItem("goldPromoModal", "1"); }} className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold">
-                  <Star className="w-4 h-4 mr-1" /> Entendido
+              <div className="flex gap-2">
+                <Button onClick={() => { setShowPromo(false); sessionStorage.setItem("goldPromoModal", "1"); }} className="flex-1 h-8 text-xs bg-yellow-500 hover:bg-yellow-600 text-white font-bold px-2">
+                  <Star className="w-3 h-3 mr-1" /> Entendido
                 </Button>
-                <Button variant="ghost" onClick={() => { setShowPromo(false); sessionStorage.setItem("goldPromoModal", "1"); }} className="text-gray-500">
-                  No mostrar mas
+                <Button variant="ghost" onClick={() => { setShowPromo(false); sessionStorage.setItem("goldPromoModal", "1"); }} className="h-8 text-[10px] text-gray-500 px-2">
+                  No mostrar
                 </Button>
               </div>
             </div>
@@ -185,31 +182,32 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          {/* Boton sidebar mobile */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSidebarOpen(true)}
-            className="md:hidden border-gray-300 text-gray-700"
-          >
-            <Menu className="w-4 h-4" />
+      {/* STICKY HEADER + BUSCADOR */}
+      <div className="sticky top-0 z-30 bg-gray-50 -mx-4 px-4 py-3 -mt-4 mb-4 border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            {/* Boton sidebar mobile */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden border-gray-300 text-gray-700 h-8 w-8 p-0"
+            >
+              <Menu className="w-4 h-4" />
+            </Button>
+            <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Package className="w-5 h-5 text-blue-600" /> Catalogo
+            </h1>
+          </div>
+          <Button onClick={() => navigate("/pedido")} className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 h-8 text-xs px-3">
+            <ShoppingCart className="w-4 h-4 mr-1" />
+            {cartCount > 0 && <span className="bg-white text-blue-600 rounded-full px-1.5 py-0.5 text-xs font-bold mr-1">{cartCount}</span>}
+            Pedido
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Package className="w-6 h-6 text-blue-600" /> Catalogo
-          </h1>
         </div>
-        <Button onClick={() => navigate("/pedido")} className="bg-blue-600 hover:bg-blue-700 text-white shrink-0">
-          <ShoppingCart className="w-4 h-4 mr-2" />
-          {cartCount > 0 && <span className="bg-white text-blue-600 rounded-full px-1.5 py-0.5 text-xs font-bold mr-1.5">{cartCount}</span>}
-          Ir al pedido
-        </Button>
-      </div>
 
-      {/* Buscador */}
-      <div className="mb-4">
+        {/* Buscador */}
+        <div>
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <Input
@@ -231,6 +229,7 @@ export default function ProductsPage() {
             Presiona <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px] font-mono">Enter</kbd> para ir al resultado
           </p>
         )}
+        </div>
       </div>
 
       {/* Layout: Sidebar + Contenido */}
