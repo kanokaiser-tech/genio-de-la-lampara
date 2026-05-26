@@ -5,9 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Genio Revendedores',
   webDir: 'dist/public',
   server: {
-    // URL de tu sitio desplegado en Kimi
-    // CAMBIA ESTA URL por la de tu sitio
-    url: 'https://TU-URL-AQUI.replit.app',
+    url: 'https://geniorevendedores.geniodelalampara.com',
     cleartext: true,
   },
   android: {
