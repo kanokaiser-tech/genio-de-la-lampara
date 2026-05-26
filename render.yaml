@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: genio-de-la-lampara
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: genio-db
+          property: connectionString
+      - key: APP_SECRET
+        generateValue: true
+      - key: PORT
+        value: 3000
+
+databases:
+  - name: genio-db
+    plan: free
+    databaseName: genio_lampara
+    user: genio
