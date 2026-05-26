@@ -14,9 +14,9 @@ function optional(name: string): string {
 
 export const env = {
   appId: optional("APP_ID"),
-  appSecret: required("APP_SECRET"),
+  appSecret: process.env.APP_SECRET || "genio-lampara-secret-key-2024-change-me",
   isProduction: process.env.NODE_ENV === "production",
-  databaseUrl: required("DATABASE_URL"),
+  databaseUrl: process.env.DATABASE_URL || "mysql://u346820500_kanokaiser:Pepe4276@localhost:3306/u346820500_diegs",
   kimiAuthUrl: optional("KIMI_AUTH_URL"),
   kimiOpenUrl: optional("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
