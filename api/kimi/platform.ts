@@ -6,7 +6,8 @@ async function kimiRequest<T>(
   token: string,
   init?: RequestInit,
 ): Promise<T | null> {
-  const resp = await fetch(`${env.kimiOpenUrl}${path}`, {
+  const openUrl = env.kimiOpenUrl || "https://openapi.kimi.ai";
+  const resp = await fetch(`${openUrl}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
