@@ -37,8 +37,8 @@ if (env.isProduction) {
     const { runMigrations } = await import("./migrations/run_migrations");
     await runMigrations();
 
-    // Iniciar sync automatico con Tiendanube cada 10 minutos
-    const { startSyncJob } = await import("./syncJob");
-    startSyncJob();
+    // NOTA: Sync automatico DESACTIVADO. Solo sync manual desde el panel de admin.
+    // const { startSyncJob } = await import("./syncJob");
+    // startSyncJob();
   });
 }
