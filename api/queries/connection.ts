@@ -7,6 +7,7 @@ import * as relations from "@db/relations";
 const fullSchema = { ...schema, ...relations };
 
 let instance: ReturnType<typeof drizzle<typeof fullSchema>>;
+let rawPool: mysql.Pool;
 
 function parseDbUrl(url: string) {
   try {
@@ -23,10 +24,10 @@ function parseDbUrl(url: string) {
   }
 }
 
-export function getDb() {
-  if (!instance) {
+function createPool() {
+  if (!rawPool) {
     const parsed = parseDbUrl(env.databaseUrl);
-    const pool = mysql.createPool({
+    rawPool = mysql.createPool({
       host: parsed?.host || "127.0.0.1",
       port: parsed?.port || 3306,
       user: parsed?.user || "u346820500_kanokaiser",
@@ -35,7 +36,19 @@ export function getDb() {
       connectionLimit: 10,
       enableKeepAlive: true,
     });
+  }
+  return rawPool;
+}
+
+export function getDb() {
+  if (!instance) {
+    const pool = createPool();
     instance = drizzle(pool, { schema: fullSchema, mode: "default" });
   }
   return instance;
+}
+
+/** Export raw pool para queries directas (syncJob, etc) */
+export function getDbRawPool(): mysql.Pool {
+  return createPool();
 }

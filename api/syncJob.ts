@@ -1,6 +1,4 @@
-import { getDb } from "./queries/connection";
-import { products, settings } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { getDb, getDbRawPool } from "./queries/connection";
 
 let lastSync = 0;
 const SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutos
@@ -32,10 +30,11 @@ export async function runTiendanubeSync() {
   try {
     const db = getDb();
 
-    // Obtener configuracion
+    // Obtener configuracion usando mysql2 directamente
     let s: any;
     try {
-      const [rows] = await db.execute('SELECT tiendanubeApiToken, tiendanubeStoreId FROM settings LIMIT 1');
+      const pool = getDbRawPool();
+      const [rows] = await pool.query('SELECT tiendanubeApiToken, tiendanubeStoreId FROM settings LIMIT 1');
       s = (rows as any[])[0];
     } catch (e: any) {
       console.error("[SyncJob] Error leyendo settings:", e.message);
@@ -131,19 +130,20 @@ export async function runTiendanubeSync() {
       ON DUPLICATE KEY UPDATE ${updateSet}
     `;
 
-    await db.execute(sqlQuery as any, values);
+    const pool = getDbRawPool();
+    await pool.query(sqlQuery, values);
 
     // Eliminar productos que ya no estan en Tiendanube
     const tnIds = allProducts.map((p) => String(p.id));
-    const localRows = await db.select({ id: products.id, tiendanubeId: products.tiendanubeId }).from(products);
+    const [localRows] = await pool.query('SELECT id, tiendanubeId FROM products');
 
-    const toDelete = localRows.filter((r) => r.tiendanubeId && !tnIds.includes(r.tiendanubeId));
+    const toDelete = (localRows as any[]).filter((r) => r.tiendanubeId && !tnIds.includes(String(r.tiendanubeId)));
     if (toDelete.length > 0) {
       const batchSize = 50;
       for (let i = 0; i < toDelete.length; i += batchSize) {
         const batch = toDelete.slice(i, i + batchSize);
         const ids = batch.map((r) => r.id).join(",");
-        await db.execute(`DELETE FROM products WHERE id IN (${ids})` as any);
+        await pool.query(`DELETE FROM products WHERE id IN (${ids})`);
       }
     }
 
