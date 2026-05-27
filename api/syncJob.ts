@@ -87,13 +87,13 @@ export async function runTiendanubeSync() {
     const placeholders = allProducts
       .map(
         () =>
-          `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .join(", ");
 
     const columns = [
       "name", "category", "priceList", "priceCash30", "priceTransfer25",
-      "slug", "tiendanubeId", "tiendanubeVariantId", "imageUrl", "description", "images_json", "stock"
+      "slug", "tiendanubeId", "tiendanubeVariantId", "imageUrl", "stock"
     ];
 
     const updateSet = columns.map((c) => `${c} = VALUES(${c})`).join(", ");
@@ -104,17 +104,15 @@ export async function runTiendanubeSync() {
       const discount30 = priceList * 0.3;
       const discount25 = priceList * 0.25;
       values.push(
-        (p.name ?? "").substring(0, 255),
-        (p.categories?.[0]?.name ?? "Sin categoria").substring(0, 100),
+        String(p.name ?? "").substring(0, 255),
+        String(p.categories?.[0]?.name ?? "Sin categoria").substring(0, 100),
         priceList.toFixed(2),
         (priceList - discount30).toFixed(2),
         (priceList - discount25).toFixed(2),
-        (p.slug ?? p.name ?? "").substring(0, 255),
+        String(p.slug ?? p.name ?? "").substring(0, 255),
         String(p.id ?? "").substring(0, 100),
         String(p.variants?.[0]?.id ?? "").substring(0, 100),
-        (p.images?.[0]?.src ?? p.image?.src ?? "").substring(0, 500),
-        (p.description ?? "").substring(0, 2000),
-        JSON.stringify(p.images?.map((i: any) => i.src) ?? []),
+        String(p.images?.[0]?.src ?? p.image?.src ?? "").substring(0, 500),
         Number(p.variants?.[0]?.stock ?? 0)
       );
     }
