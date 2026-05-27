@@ -27,8 +27,10 @@ function parseDbUrl(url: string) {
 function createPool() {
   if (!rawPool) {
     const parsed = parseDbUrl(env.databaseUrl);
+    // Forzar IPv4 para evitar problemas con IPv6 en Hostinger
+    const host = (parsed?.host === "localhost" ? "127.0.0.1" : parsed?.host) || "127.0.0.1";
     rawPool = mysql.createPool({
-      host: parsed?.host || "127.0.0.1",
+      host,
       port: parsed?.port || 3306,
       user: parsed?.user || "u346820500_kanokaiser",
       password: parsed?.password || "Pepe4276",
