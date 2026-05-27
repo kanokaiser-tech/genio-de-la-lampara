@@ -33,7 +33,15 @@ export async function runTiendanubeSync() {
     const db = getDb();
 
     // Obtener configuracion
-    const [s] = await db.select().from(settings).limit(1);
+    let s: any;
+    try {
+      const [rows] = await db.execute('SELECT tiendanubeApiToken, tiendanubeStoreId FROM settings LIMIT 1');
+      s = (rows as any[])[0];
+    } catch (e: any) {
+      console.error("[SyncJob] Error leyendo settings:", e.message);
+      jobRunning = false;
+      return { error: "DB error: " + e.message };
+    }
     if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) {
       console.log("[SyncJob] Sin configuracion de Tiendanube, abortando.");
       jobRunning = false;
