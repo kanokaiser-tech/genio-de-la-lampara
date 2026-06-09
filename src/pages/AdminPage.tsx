@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User, History, ShoppingCart, Search } from "lucide-react";
+import { Loader2, Package, Users, RefreshCw, Settings, ClipboardList, Trash2, Plus, Save, Lock, Pencil, X, Check, Shield, TrendingUp, Calendar, ImageOff, Coins, Clock, MapPin, User, History, ShoppingCart, Search, Star, GripVertical } from "lucide-react";
 
 export default function AdminPage() {
   const { isSuperadmin } = useAuth();
@@ -48,6 +48,10 @@ export default function AdminPage() {
   const { data: orders, isLoading: lo } = trpc.order.myOrdersAsAdmin.useQuery();
   const { data: settings } = trpc.settings.get.useQuery();
   const { data: salesByAdmin, isLoading: ls } = trpc.order.salesByAdmin.useQuery(undefined, { enabled: isSuperadmin });
+  const { data: featuredProducts, refetch: refetchFeatured } = trpc.product.featured.useQuery();
+
+  // Ofertas
+  const [featuredDragged, setFeaturedDragged] = useState<number | null>(null);
 
   // Mutations
   const cProd = trpc.product.create.useMutation({ onSuccess: () => { utils.product.list.invalidate(); setNewProd({ name: "", category: "", priceList: "", stock: "0" }); } });
@@ -77,6 +81,9 @@ export default function AdminPage() {
   const chPass = trpc.user.changePassword.useMutation({ onSuccess: () => closePassDialog() });
   const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); utils.user.byRole.invalidate(); setEditing(null); } });
   const upSet = trpc.settings.update.useMutation({ onSuccess: () => utils.settings.get.invalidate() });
+  const setFeatured = trpc.product.setFeatured.useMutation({ onSuccess: () => { utils.product.list.invalidate(); utils.product.featured.invalidate(); } });
+  const removeFeatured = trpc.product.removeFeatured.useMutation({ onSuccess: () => { utils.product.list.invalidate(); utils.product.featured.invalidate(); } });
+  const reorderFeatured = trpc.product.reorderFeatured.useMutation({ onSuccess: () => utils.product.featured.invalidate() });
   const sync = trpc.tiendanube.sync.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const test = trpc.tiendanube.test.useMutation();
   const appr = trpc.order.approve.useMutation({ onSuccess: () => utils.order.myOrdersAsAdmin.invalidate() });
@@ -157,6 +164,7 @@ export default function AdminPage() {
   const cartCount = adminCarts?.reduce((s, c) => s + c.items.length, 0) ?? 0;
   const tabs = [
     { value: "products", label: `Productos (${products?.length ?? 0})`, icon: Package },
+    { value: "featured", label: `Ofertas (${featuredProducts?.length ?? 0})`, icon: Star },
     { value: "revendedores", label: `Revendedores (${revs?.length ?? 0})`, icon: Users },
     { value: "carts", label: `Carritos (${cartCount})`, icon: ShoppingCart },
     ...(isSuperadmin ? [{ value: "admins", label: `Admins (${admins?.length ?? 0})`, icon: Users }] : []),
@@ -177,10 +185,16 @@ export default function AdminPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="bg-white border border-gray-200 mb-6 flex-wrap h-auto">
+        <TabsList className="bg-white border border-gray-200 mb-6 w-full overflow-x-auto flex-nowrap h-auto py-1 px-1 scrollbar-hide">
           {tabs.map(t => (
-            <TabsTrigger key={t.value} value={t.value} className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-600">
-              <t.icon className="w-4 h-4 mr-1" /> {t.label}
+            <TabsTrigger 
+              key={t.value} 
+              value={t.value} 
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-gray-600 flex-shrink-0 px-2 py-1.5 text-xs whitespace-nowrap"
+            >
+              <t.icon className="w-3.5 h-3.5 mr-1" />
+              <span className="hidden sm:inline">{t.label}</span>
+              <span className="sm:hidden">{t.label.split(' ')[0]}</span>
             </TabsTrigger>
           ))}
         </TabsList>
@@ -265,6 +279,16 @@ export default function AdminPage() {
                     <span className="text-right text-blue-600 font-medium">{formatPrice(p.priceCash30)}</span>
                     <span className="text-right text-green-600">{formatPrice(p.priceTransfer25)}</span>
                     <div className="flex justify-center gap-1">
+                      <button
+                        onClick={() => {
+                          if (p.isFeatured) removeFeatured.mutate({ id: p.id });
+                          else setFeatured.mutate({ id: p.id });
+                        }}
+                        className={p.isFeatured ? "text-yellow-500 hover:text-gray-400" : "text-gray-300 hover:text-yellow-500"}
+                        title={p.isFeatured ? "Quitar de ofertas" : "Agregar a ofertas"}
+                      >
+                        <Star className={`w-4 h-4 ${p.isFeatured ? "fill-yellow-400" : ""}`} />
+                      </button>
                       {p.tiendanubeId && (
                         <button onClick={() => { if (confirm('Eliminar de Tiendanube tambien?')) delTnProd.mutate({ productId: p.id }); }} className="text-gray-400 hover:text-red-500" title="Eliminar de Tiendanube"><Trash2 className="w-3.5 h-3.5" /></button>
                       )}
@@ -273,6 +297,66 @@ export default function AdminPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* OFERTAS DE LA SEMANA */}
+        <TabsContent value="featured" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-gray-500">{featuredProducts?.length ?? 0} productos en ofertas</p>
+            <p className="text-xs text-gray-400">Arrastra para reordenar</p>
+          </div>
+          {!featuredProducts || featuredProducts.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 text-sm">
+              No hay productos destacados. Ve a la pestaña Productos y marca algunos con la estrella.
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="hidden md:grid grid-cols-[40px,48px,1fr,120px,80px,80px,80px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span></span><span></span><span>Nombre</span><span>Categoria</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Accion</span>
+              </div>
+              {featuredProducts.map((p: any, idx: number) => (
+                <div
+                  key={p.id}
+                  draggable
+                  onDragStart={() => setFeaturedDragged(idx)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (featuredDragged === null || featuredDragged === idx) return;
+                    const newOrder = featuredProducts.map((_: any, i: number) => i);
+                    const [moved] = newOrder.splice(featuredDragged, 1);
+                    newOrder.splice(idx, 0, moved);
+                    setFeaturedDragged(idx);
+                  }}
+                  onDragEnd={() => {
+                    if (featuredDragged !== null) {
+                      const newOrder = featuredProducts.map((_: any, i: number) => ({ id: featuredProducts[i].id, order: i }));
+                      reorderFeatured.mutate({ orders: newOrder });
+                    }
+                    setFeaturedDragged(null);
+                  }}
+                  className={`grid grid-cols-[40px,48px,1fr,120px,80px,80px,80px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm ${featuredDragged === idx ? "bg-blue-50" : ""}`}
+                >
+                  <GripVertical className="w-4 h-4 text-gray-400 cursor-move" />
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                    {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy" /> : <ImageOff className="w-4 h-4 text-gray-300" />}
+                  </div>
+                  <span className="truncate text-gray-900 font-medium">{p.name}</span>
+                  <span className="text-xs text-gray-500">{p.category}</span>
+                  <span className="text-right font-medium text-blue-600">{formatPrice(Number(p.priceCash30))}</span>
+                  <span className="text-right text-xs text-gray-500">{formatPrice(Number(p.priceTransfer25))}</span>
+                  <div className="text-center">
+                    <button
+                      onClick={() => removeFeatured.mutate({ id: p.id })}
+                      className="text-yellow-500 hover:text-red-500 transition-colors"
+                      title="Quitar de ofertas"
+                    >
+                      <Star className="w-5 h-5 fill-yellow-400" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </TabsContent>

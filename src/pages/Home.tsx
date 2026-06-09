@@ -1,12 +1,30 @@
 import { Link } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
+import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
-import { Package, ShoppingCart, MessageCircle, Percent, Lamp, ArrowRight } from "lucide-react";
+import { ProductCarousel } from "@/components/ProductCarousel";
+import {
+  Package, ShoppingCart, MessageCircle, Percent, Lamp, ArrowRight,
+  Sparkles, Zap, Heart
+} from "lucide-react";
 
 export default function Home() {
   const { isAuthenticated, isAdmin } = useAuth();
+
+  // Queries para secciones (solo se ejecutan si está autenticado)
+  const { data: featured } = trpc.product.featured.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: newArrivals } = trpc.product.newArrivals.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: recommendations } = trpc.product.recommendations.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
   return (
     <div className="min-h-[calc(100vh-4rem)]">
+      {/* Hero */}
       <section className="text-center py-16 md:py-24">
         <div className="inline-flex items-center gap-2 bg-yellow-500/10 text-yellow-500 px-4 py-2 rounded-full text-sm font-medium mb-8 border border-yellow-500/20">
           <Percent className="w-4 h-4" /> Descuentos exclusivos para revendedores
@@ -15,7 +33,7 @@ export default function Home() {
         <p className="text-zinc-400 text-lg max-w-2xl mx-auto mb-10">Arma tu pedido con precios exclusivos. Efectivo 30% off o transferencia 25% off.</p>
         {isAuthenticated ? (
           <Link to={isAdmin ? "/admin" : "/productos"}>
-            <Button className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-8 py-6 text-lg rounded-xl">Ir al panel <ArrowRight className="w-5 h-5 ml-2" /></Button>
+            <Button className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-8 py-6 text-lg rounded-xl">Ir al catalogo <ArrowRight className="w-5 h-5 ml-2" /></Button>
           </Link>
         ) : (
           <Link to="/login">
@@ -23,6 +41,49 @@ export default function Home() {
           </Link>
         )}
       </section>
+
+      {/* Secciones de productos (solo para usuarios logueados) */}
+      {isAuthenticated && (
+        <section className="py-8 border-t border-zinc-800">
+          <div className="max-w-6xl mx-auto px-4">
+            {/* Ofertas de la semana */}
+            <ProductCarousel
+              title="Ofertas de la semana"
+              subtitle="Seleccionadas por nuestro equipo"
+              products={featured as any}
+              badge="TOP"
+              emptyMessage="No hay ofertas destacadas esta semana"
+            />
+
+            {/* Novedades */}
+            <ProductCarousel
+              title="Novedades"
+              subtitle="Lo ultimo que llego al catalogo"
+              products={newArrivals as any}
+              badge="NUEVO"
+            />
+
+            {/* Recomendados para vos */}
+            <ProductCarousel
+              title="Recomendados para vos"
+              subtitle="Basado en tus compras y vistas"
+              products={recommendations as any}
+              badge="PARA VOS"
+            />
+
+            {/* Ver todo */}
+            <div className="text-center mt-6">
+              <Link to="/productos">
+                <Button variant="outline" className="border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/10 px-8">
+                  Ver todo el catalogo <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Features */}
       <section className="py-12 border-t border-zinc-800">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[

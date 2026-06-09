@@ -63,7 +63,7 @@ export default function Layout() {
     { to: "/admin/vendor-products", label: "Aprobar", icon: Shield },
   ];
 
-  // Links para menú móvil
+  // Links para menú móvil - usuario
   const mobileLinks = [
     { to: "/", label: "Inicio", icon: Home },
     { to: "/productos", label: "Productos", icon: Package },
@@ -74,11 +74,14 @@ export default function Layout() {
     { to: "/perfil", label: "Perfil", icon: User },
   ];
 
-  if (isAdmin || isSuperadmin) {
-    mobileLinks.unshift({ to: "/admin", label: "Admin", icon: Settings });
-    mobileLinks.splice(2, 0, { to: "/delivery", label: "Reparto", icon: Truck });
-    mobileLinks.splice(3, 0, { to: "/admin/vendor-products", label: "Aprobar", icon: Shield });
-  }
+  // Links de admin para menú móvil (separados)
+  const mobileAdminLinks = (isAdmin || isSuperadmin)
+    ? [
+        { to: "/admin", label: "Panel Admin", icon: Settings },
+        { to: "/delivery", label: "Reparto", icon: Truck },
+        { to: "/admin/vendor-products", label: "Aprobar", icon: Shield },
+      ]
+    : [];
 
   if (isLogin) return <Outlet />;
 
@@ -212,33 +215,61 @@ export default function Layout() {
 
       {/* Menú móvil */}
       {menuOpen && (
-        <div className="md:hidden fixed top-14 left-0 right-0 bg-white z-40 p-4 space-y-1 shadow-lg max-h-[80vh] overflow-y-auto">
-          {mobileLinks.map((l) => (
-            <Link
-              key={l.to}
-              to={l.to}
-              onClick={() => setMenuOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
-                l.highlight
-                  ? "bg-red-50 text-red-600 font-medium border border-red-200"
-                  : location.pathname === l.to
-                  ? "bg-blue-50 text-blue-600"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <l.icon className="w-4 h-4" />
-              {l.label}
-              {l.highlight && (
-                <span className="ml-auto text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">🔥</span>
-              )}
-            </Link>
-          ))}
+        <div className="md:hidden fixed top-14 left-0 right-0 bg-white z-40 p-4 shadow-lg max-h-[80vh] overflow-y-auto">
+          {/* Links de usuario */}
+          <div className="space-y-1">
+            {mobileLinks.map((l) => (
+              <Link
+                key={l.to}
+                to={l.to}
+                onClick={() => setMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
+                  l.highlight
+                    ? "bg-red-50 text-red-600 font-medium border border-red-200"
+                    : location.pathname === l.to
+                    ? "bg-blue-50 text-blue-600"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <l.icon className="w-4 h-4" />
+                {l.label}
+                {l.highlight && (
+                  <span className="ml-auto text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">🔥</span>
+                )}
+              </Link>
+            ))}
+          </div>
+
+          {/* Links de admin - separados */}
+          {mobileAdminLinks.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Admin</p>
+              <div className="space-y-1">
+                {mobileAdminLinks.map((l) => (
+                  <Link
+                    key={l.to}
+                    to={l.to}
+                    onClick={() => setMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
+                      location.pathname === l.to
+                        ? "bg-blue-50 text-blue-600"
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    <l.icon className="w-4 h-4" />
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => {
               logout();
               setMenuOpen(false);
             }}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-red-600 hover:bg-red-50 w-full mt-2"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-red-600 hover:bg-red-50 w-full mt-3 pt-3 border-t border-gray-200"
           >
             <LogOut className="w-4 h-4" /> Cerrar sesión
           </button>

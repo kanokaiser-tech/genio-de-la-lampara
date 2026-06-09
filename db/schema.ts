@@ -41,12 +41,43 @@ export const products = mysqlTable("products", {
   tiendanubeVariantId: varchar("tiendanubeVariantId", { length: 100 }), // ID de la variante en TN (para stock)
   slug: varchar("slug", { length: 500 }).unique(),
   active: boolean("active").default(true).notNull(),
+  isNew: boolean("is_new").default(false),
+  isFeatured: boolean("isFeatured").default(false),
+  featuredOrder: int("featuredOrder").default(0),
+  viewCount: int("viewCount").default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = typeof products.$inferInsert;
+
+/* ------------------------------------------------------------------ */
+/*  UserInteractions - Para recomendaciones personalizadas            */
+/* ------------------------------------------------------------------ */
+export const userInteractions = mysqlTable("userInteractions", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+  productId: bigint("productId", { mode: "number", unsigned: true }).notNull(),
+  type: mysqlEnum("type", ["view", "purchase", "cart"]).notNull(),
+  count: int("count").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type UserInteraction = typeof userInteractions.$inferSelect;
+
+/* ------------------------------------------------------------------ */
+/*  UserCategoryViews - Para recomendaciones por categoría            */
+/* ------------------------------------------------------------------ */
+export const userCategoryViews = mysqlTable("userCategoryViews", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+  category: varchar("category", { length: 255 }).notNull(),
+  count: int("count").default(1).notNull(),
+});
+
+export type UserCategoryView = typeof userCategoryViews.$inferSelect;
 
 export const orders = mysqlTable("orders", {
   id: serial("id").primaryKey(),

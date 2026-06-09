@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery, adminQuery } from "./middleware";
+import { createRouter, publicQuery, adminQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { products } from "@db/schema";
 import { eq, and, or, like } from "drizzle-orm";
@@ -69,6 +69,198 @@ export const productRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
       await db.execute(`UPDATE products SET location = '${input.location || ''}' WHERE id = ${input.id}`);
+      return { success: true };
+    }),
+
+  /* ================================================================
+     OFERTAS DE LA SEMANA - Productos destacados por admin
+     ================================================================ */
+  featured: publicQuery.query(async () => {
+    const db = getDb();
+    const [rows] = await db.execute(`
+      SELECT id, name, category, priceList, priceCash30, priceTransfer25, stock,
+             imageUrl, slug, isFeatured, featuredOrder, viewCount
+      FROM products
+      WHERE active = true AND isFeatured = true
+      ORDER BY featuredOrder ASC, id DESC
+      LIMIT 20
+    `);
+    return rows;
+  }),
+
+  /* ================================================================
+     NOVEDADES - Productos nuevos (últimos 30 días o is_new)
+     ================================================================ */
+  newArrivals: publicQuery.query(async () => {
+    const db = getDb();
+    const [rows] = await db.execute(`
+      SELECT id, name, category, priceList, priceCash30, priceTransfer25, stock,
+             imageUrl, slug, is_new, createdAt
+      FROM products
+      WHERE active = true AND (is_new = true OR createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY))
+      ORDER BY createdAt DESC
+      LIMIT 30
+    `);
+    return rows;
+  }),
+
+  /* ================================================================
+     RECOMENDACIONES - Basadas en historial del usuario (ML style)
+     ================================================================ */
+  recommendations: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    const userId = ctx.user.id;
+
+    // 1. Obtener categorías más vistas/compradas por el usuario
+    const [topCategories] = await db.execute(`
+      SELECT category, count FROM userCategoryViews
+      WHERE userId = ${userId}
+      ORDER BY count DESC
+      LIMIT 3
+    `);
+
+    const cats = (topCategories as any[]).map((c: any) => c.category);
+
+    // 2. Obtener productos que el usuario ya compró o vió (para excluirlos)
+    const [seenProducts] = await db.execute(`
+      SELECT productId FROM userInteractions
+      WHERE userId = ${userId}
+    `);
+    const seenIds = (seenProducts as any[]).map((p: any) => p.productId).join(",");
+
+    let query = `
+      SELECT id, name, category, priceList, priceCash30, priceTransfer25, stock,
+             imageUrl, slug, viewCount
+      FROM products
+      WHERE active = true
+    `;
+
+    // Si tenemos categorías preferidas, priorizarlas
+    if (cats.length > 0) {
+      const catList = cats.map(c => `'${c}'`).join(",");
+      query += ` AND category IN (${catList})`;
+    }
+
+    // Excluir productos ya vistos/comprados
+    if (seenIds) {
+      query += ` AND id NOT IN (${seenIds})`;
+    }
+
+    query += ` ORDER BY viewCount DESC, createdAt DESC LIMIT 20`;
+
+    const [rows] = await db.execute(query);
+
+    // Si no hay suficientes resultados, completar con populares
+    if ((rows as any[]).length < 10) {
+      const [popular] = await db.execute(`
+        SELECT id, name, category, priceList, priceCash30, priceTransfer25, stock,
+               imageUrl, slug, viewCount
+        FROM products
+        WHERE active = true
+        ${seenIds ? `AND id NOT IN (${seenIds})` : ""}
+        ORDER BY viewCount DESC, createdAt DESC
+        LIMIT 20
+      `);
+      return popular;
+    }
+
+    return rows;
+  }),
+
+  /* ================================================================
+     SET FEATURED - Marcar producto como oferta (admin)
+     ================================================================ */
+  setFeatured: adminQuery
+    .input(z.object({ id: z.number(), order: z.number().optional() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const order = input.order ?? 0;
+      await db.execute(`
+        UPDATE products SET isFeatured = true, featuredOrder = ${order}
+        WHERE id = ${input.id}
+      `);
+      return { success: true };
+    }),
+
+  /* ================================================================
+     REMOVE FEATURED - Quitar producto de ofertas (admin)
+     ================================================================ */
+  removeFeatured: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.execute(`
+        UPDATE products SET isFeatured = false, featuredOrder = 0
+        WHERE id = ${input.id}
+      `);
+      return { success: true };
+    }),
+
+  /* ================================================================
+     REORDER FEATURED - Cambiar orden de ofertas (admin)
+     ================================================================ */
+  reorderFeatured: adminQuery
+    .input(z.object({ orders: z.array(z.object({ id: z.number(), order: z.number() })) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      for (const item of input.orders) {
+        await db.execute(`
+          UPDATE products SET featuredOrder = ${item.order} WHERE id = ${item.id}
+        `);
+      }
+      return { success: true };
+    }),
+
+  /* ================================================================
+     CLEAR NEW FLAG - Marcar novedades como ya vistas (admin)
+     ================================================================ */
+  clearNewFlag: adminQuery.mutation(async () => {
+    const db = getDb();
+    await db.execute(`UPDATE products SET is_new = false WHERE is_new = true`);
+    return { success: true };
+  }),
+
+  /* ================================================================
+     TRACK INTERACTION - Registrar view/purchase/cart del usuario
+     ================================================================ */
+  trackInteraction: authedQuery
+    .input(z.object({
+      productId: z.number(),
+      type: z.enum(["view", "purchase", "cart"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const userId = ctx.user.id;
+
+      // Insert or update interaction count
+      await db.execute(`
+        INSERT INTO userInteractions (userId, productId, type, count)
+        VALUES (${userId}, ${input.productId}, '${input.type}', 1)
+        ON DUPLICATE KEY UPDATE count = count + 1
+      `);
+
+      // Si es view, también incrementar viewCount del producto
+      if (input.type === "view") {
+        await db.execute(`
+          UPDATE products SET viewCount = viewCount + 1 WHERE id = ${input.productId}
+        `);
+      }
+
+      // Si tiene categoría, registrar categoría vista
+      if (input.type === "view" || input.type === "purchase") {
+        const [product] = await db.execute(`
+          SELECT category FROM products WHERE id = ${input.productId}
+        `);
+        const category = (product as any[])[0]?.category;
+        if (category) {
+          await db.execute(`
+            INSERT INTO userCategoryViews (userId, category, count)
+            VALUES (${userId}, '${category}', 1)
+            ON DUPLICATE KEY UPDATE count = count + 1
+          `);
+        }
+      }
+
       return { success: true };
     }),
 });

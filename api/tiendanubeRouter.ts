@@ -92,8 +92,8 @@ export const tiendanubeRouter = createRouter({
       seenSlugs.push(slug);
 
       await getDb().execute(sql`
-        INSERT INTO products (name, priceList, priceCash30, priceTransfer25, category, stock, imageUrl, slug, tiendanubeId, tiendanubeVariantId, active)
-        VALUES (${name}, ${originalPrice.toFixed(2)}, ${priceCash30.toFixed(2)}, ${priceTransfer25.toFixed(2)}, ${category}, ${tnStock}, ${imageUrl}, ${slug}, ${String(tnProduct.id)}, ${variantId}, TRUE)
+        INSERT INTO products (name, priceList, priceCash30, priceTransfer25, category, stock, imageUrl, slug, tiendanubeId, tiendanubeVariantId, active, is_new)
+        VALUES (${name}, ${originalPrice.toFixed(2)}, ${priceCash30.toFixed(2)}, ${priceTransfer25.toFixed(2)}, ${category}, ${tnStock}, ${imageUrl}, ${slug}, ${String(tnProduct.id)}, ${variantId}, TRUE, TRUE)
         ON DUPLICATE KEY UPDATE
           name = VALUES(name),
           priceList = VALUES(priceList),
@@ -105,6 +105,7 @@ export const tiendanubeRouter = createRouter({
           tiendanubeId = VALUES(tiendanubeId),
           tiendanubeVariantId = VALUES(tiendanubeVariantId),
           active = TRUE
+          -- NO actualizamos is_new para que los existentes mantengan su valor
       `);
       imported++;
     }
