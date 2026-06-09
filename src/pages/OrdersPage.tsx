@@ -58,10 +58,21 @@ export default function OrdersPage() {
   const updatePayment = trpc.order.updatePaymentType.useMutation({
     onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); },
   });
+  const addExtra = trpc.order.addExtra.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); setExtraDesc(""); setExtraPrice(""); setShowExtraForm(null); },
+  });
+  const removeExtra = trpc.order.removeExtra.useMutation({
+    onSuccess: () => { utils.order.myOrdersAsAdmin.invalidate(); utils.order.myOrders.invalidate(); },
+  });
 
   // Estado para agregar producto a un pedido
   const [addProductId, setAddProductId] = useState("");
   const [addQty, setAddQty] = useState("1");
+
+  // Estado para agregar item extra
+  const [extraDesc, setExtraDesc] = useState("");
+  const [extraPrice, setExtraPrice] = useState("");
+  const [showExtraForm, setShowExtraForm] = useState<number | null>(null);
 
   const orders: OrderWithItems[] = isAdmin ? (adminOrders ?? []) : (myOrders ?? []);
 
@@ -238,17 +249,6 @@ export default function OrdersPage() {
                           </button>
                         </div>
 
-                        {/* Cambiar metodo de pago */}
-                        <div className="flex items-center gap-2 pt-1">
-                          <span className="text-xs text-gray-500">Metodo de pago:</span>
-                          <button
-                            onClick={() => updatePayment.mutate({ orderId: order.id, paymentType: order.paymentType === "efectivo" ? "transferencia" : "efectivo" })}
-                            disabled={updatePayment.isPending}
-                            className={`px-2 py-1 rounded text-xs font-bold border transition-colors ${order.paymentType === "efectivo" ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200" : "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"}`}
-                          >
-                            {order.paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}
-                          </button>
-                        </div>
                       </>
                     ) : (
                       /* PEDIDO APROBADO/RECHAZADO = SOLO LECTURA */
@@ -270,6 +270,100 @@ export default function OrdersPage() {
                       </>
                     )}
                   </div>
+
+                  {/* Cambiar metodo de pago (admin, pedidos pendientes y aprobados) */}
+                  {isAdmin && order.status !== "rejected" && (
+                    <div className="flex items-center gap-2 pt-2 pb-1">
+                      <span className="text-xs text-gray-500">Metodo de pago:</span>
+                      <button
+                        onClick={() => updatePayment.mutate({ orderId: order.id, paymentType: order.paymentType === "efectivo" ? "transferencia" : "efectivo" })}
+                        disabled={updatePayment.isPending}
+                        className={`px-2 py-1 rounded text-xs font-bold border transition-colors ${order.paymentType === "efectivo" ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200" : "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"}`}
+                      >
+                        {order.paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Item Extra / Servicio Adicional (admin) - TEXTO LIBRE + PRECIO MANUAL */}
+                  {isAdmin && order.status !== "rejected" && (
+                    <div className="mt-4 mb-3 border-t border-dashed border-gray-300 pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Plus className="w-4 h-4 text-purple-600" />
+                        <h4 className="text-sm font-bold text-purple-700 uppercase tracking-wide">Item Extra / Servicio</h4>
+                        <span className="text-xs text-gray-400">(texto libre + precio manual)</span>
+                      </div>
+
+                      {/* Formulario para agregar extra */}
+                      {showExtraForm === order.id ? (
+                        <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 mb-3 space-y-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Descripcion del trabajo/servicio:</label>
+                            <textarea
+                              placeholder="Ej: Cambio de modulo A20 - mano de obra..."
+                              value={extraDesc}
+                              onChange={e => setExtraDesc(e.target.value)}
+                              rows={2}
+                              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"
+                            />
+                          </div>
+                          <div className="flex gap-3 items-end">
+                            <div className="w-40">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Precio ($):</label>
+                              <input
+                                type="number"
+                                placeholder="35000"
+                                value={extraPrice}
+                                onChange={e => setExtraPrice(e.target.value)}
+                                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 font-bold focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                              />
+                            </div>
+                            <button
+                              onClick={() => { if (extraDesc && extraPrice) { addExtra.mutate({ orderId: order.id, description: extraDesc, price: parseFloat(extraPrice) }); } }}
+                              disabled={!extraDesc || !extraPrice || addExtra.isPending}
+                              className="px-6 py-2 rounded-lg bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {addExtra.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Agregar al pedido"}
+                            </button>
+                            <button
+                              onClick={() => setShowExtraForm(null)}
+                              className="px-4 py-2 rounded-lg text-gray-500 text-sm hover:text-gray-700"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setShowExtraForm(order.id); setExtraDesc(""); setExtraPrice(""); }}
+                          className="w-full py-3 rounded-xl border-2 border-dashed border-purple-300 text-purple-600 font-medium hover:bg-purple-50 hover:border-purple-400 transition-all text-sm"
+                        >
+                          + Agregar item extra o servicio (escribir libremente)
+                        </button>
+                      )}
+
+                      {/* Lista de extras ya agregados */}
+                      {(order as any).extras?.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs font-medium text-gray-500">Items extras agregados:</p>
+                          {(order as any).extras.map((extra: any) => (
+                            <div key={extra.id} className="flex items-center justify-between bg-purple-100 border border-purple-200 rounded-xl px-4 py-3">
+                              <span className="text-gray-800 font-medium">{extra.description}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="font-bold text-purple-700 text-lg">{formatPrice(Number(extra.price))}</span>
+                                <button
+                                  onClick={() => { if (confirm("Eliminar este item extra?")) removeExtra.mutate({ orderId: order.id, extraId: extra.id }); }}
+                                  className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <XCircle className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Descuento por monedas de oro */}
                   {Number((order as any).goldCoinsUsed ?? 0) > 0 && (
@@ -405,6 +499,25 @@ function generateOrderPDF(order: any) {
         doc.text(`$${Number(item.subtotal).toLocaleString("es-AR")}`, 175, y);
         y += 6;
       });
+    }
+
+    // Items extra en el PDF
+    const hasExtras = order.extras && order.extras.length > 0;
+    if (hasExtras) {
+      y += 2;
+      doc.setFontSize(8);
+      doc.setTextColor(147, 51, 234);
+      doc.setFont("helvetica", "bold");
+      doc.text("EXTRAS:", 14, y);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      y += 5;
+      order.extras.forEach((extra: any) => {
+        doc.text(extra.description.substring(0, 50), 14, y);
+        doc.text(`$${Number(extra.price).toLocaleString("es-AR")}`, 175, y);
+        y += 5;
+      });
+      doc.setFontSize(9);
     }
 
     doc.line(14, y + 2, 196, y + 2);

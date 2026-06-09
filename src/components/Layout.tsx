@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { 
   Package, ShoppingCart, ClipboardList, Settings, LogOut, Menu, X, 
-  Lamp, KeyRound, Loader2, Coins, Store, Home, User, Truck, Shield
+  Lamp, KeyRound, Loader2, Coins, Store, Home, User, Truck, Shield,
+  ChevronDown
 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
@@ -21,6 +22,7 @@ export default function Layout() {
   const { user, isAuthenticated, isAdmin, isSuperadmin, logout } = useAuth();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [passDialogOpen, setPassDialogOpen] = useState(false);
   const [oldPass, setOldPass] = useState("");
   const [newPass, setNewPass] = useState("");
@@ -45,7 +47,7 @@ export default function Layout() {
 
   const isLogin = location.pathname === "/login";
 
-  // Links para desktop (menú horizontal)
+  // Links para desktop - solo usuario
   const desktopLinks = [
     { to: "/", label: "Inicio", icon: Home },
     { to: "/productos", label: "Productos", icon: Package },
@@ -54,12 +56,12 @@ export default function Layout() {
     { to: "/marketplace", label: "Marketplace 🔥", icon: Store, highlight: true },
   ];
 
-  // Agregar links de admin
-  if (isAdmin || isSuperadmin) {
-    desktopLinks.unshift({ to: "/admin", label: "Admin", icon: Settings });
-    desktopLinks.push({ to: "/delivery", label: "Reparto", icon: Truck });
-    desktopLinks.push({ to: "/admin/vendor-products", label: "Aprobar", icon: Shield });
-  }
+  // Links exclusivos de admin (van en dropdown)
+  const adminLinks = [
+    { to: "/admin", label: "Panel Admin", icon: Settings },
+    { to: "/delivery", label: "Reparto", icon: Truck },
+    { to: "/admin/vendor-products", label: "Aprobar", icon: Shield },
+  ];
 
   // Links para menú móvil
   const mobileLinks = [
@@ -105,6 +107,45 @@ export default function Layout() {
               {l.label}
             </Link>
           ))}
+
+          {/* Dropdown Admin */}
+          {(isAdmin || isSuperadmin) && (
+            <div className="relative">
+              <button
+                onClick={() => setAdminMenuOpen(!adminMenuOpen)}
+                onBlur={() => setTimeout(() => setAdminMenuOpen(false), 150)}
+                className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                  adminLinks.some(l => location.pathname === l.to)
+                    ? "bg-white/20 text-white"
+                    : "text-white/90 hover:bg-white/10"
+                }`}
+              >
+                <Shield className="w-4 h-4" />
+                <span className="hidden lg:inline">Admin</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${adminMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {adminMenuOpen && (
+                <div className="absolute top-full right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-200 py-1 min-w-[180px] z-50">
+                  {adminLinks.map((l) => (
+                    <Link
+                      key={l.to}
+                      to={l.to}
+                      onClick={() => setAdminMenuOpen(false)}
+                      className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
+                        location.pathname === l.to
+                          ? "bg-blue-50 text-blue-600 font-medium"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <l.icon className="w-4 h-4" />
+                      {l.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

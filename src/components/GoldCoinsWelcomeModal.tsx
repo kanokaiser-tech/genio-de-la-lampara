@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Coins, Gift, Zap } from "lucide-react";
 
-const GOLD_COINS_WELCOME_KEY = "gold_coins_welcome_seen_v2";
+const GOLD_COINS_WELCOME_KEY = "gold_coins_welcome_seen_final";
 
 interface GoldCoinsWelcomeModalProps {
   open: boolean;
@@ -14,17 +14,18 @@ interface GoldCoinsWelcomeModalProps {
 export function GoldCoinsWelcomeModal({ open, onClose }: GoldCoinsWelcomeModalProps) {
   const [dontShowAgain, setDontShowAgain] = useState(false);
 
+  // Si ya se vio permanentemente, no renderizar nada
+  if (localStorage.getItem(GOLD_COINS_WELCOME_KEY) === "true") return null;
+  if (!open) return null;
+
   const handleClose = () => {
-    if (dontShowAgain) {
-      localStorage.setItem(GOLD_COINS_WELCOME_KEY, "true");
-    }
+    // SIEMPRE guardar que se vio, independientemente del checkbox
+    localStorage.setItem(GOLD_COINS_WELCOME_KEY, "true");
     onClose();
   };
 
-  if (!open) return null;
-
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(val) => { if (!val) handleClose(); }}>
       <DialogContent className="max-w-md bg-white rounded-xl shadow-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
@@ -59,7 +60,7 @@ export function GoldCoinsWelcomeModal({ open, onClose }: GoldCoinsWelcomeModalPr
               onCheckedChange={(checked) => setDontShowAgain(checked as boolean)}
             />
             <label htmlFor="dont-show-again" className="text-sm cursor-pointer">
-              No volver a mostrar este mensaje
+              No volver a mostrar nunca
             </label>
           </div>
         </div>

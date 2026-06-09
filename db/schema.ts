@@ -63,6 +63,11 @@ export const orders = mysqlTable("orders", {
   goldCoinsUsed: int("goldCoinsUsed").default(0).notNull(),
   discountPesos: decimal("discountPesos", { precision: 12, scale: 2 }).default("0").notNull(),
   webhookSent: boolean("webhookSent").default(false).notNull(),
+  // Campos de delivery
+  shippingAddress: text("shipping_address"),
+  deliveryStatus: mysqlEnum("delivery_status", ["pending", "in_route", "delivered"]).default("pending"),
+  deliveryLat: decimal("deliveryLat", { precision: 10, scale: 8 }),
+  deliveryLng: decimal("deliveryLng", { precision: 11, scale: 8 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
@@ -83,6 +88,20 @@ export const orderItems = mysqlTable("orderItems", {
 
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = typeof orderItems.$inferInsert;
+
+/* ------------------------------------------------------------------ */
+/*  OrderExtras - Items extra agregados por el admin                  */
+/* ------------------------------------------------------------------ */
+export const orderExtras = mysqlTable("orderExtras", {
+  id: serial("id").primaryKey(),
+  orderId: bigint("orderId", { mode: "number", unsigned: true }).notNull(),
+  description: varchar("description", { length: 500 }).notNull(),
+  price: decimal("price", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OrderExtra = typeof orderExtras.$inferSelect;
+export type InsertOrderExtra = typeof orderExtras.$inferInsert;
 
 export const cartItems = mysqlTable("cartItems", {
   id: serial("id").primaryKey(),

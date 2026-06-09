@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { createRouter, userQuery, adminQuery, superadminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { orders, orderItems, users, products, settings, goldCoinTransactions } from "@db/schema";
+import { orders, orderItems, orderExtras, users, products, settings, goldCoinTransactions } from "@db/schema";
 import { calculateGoldCoins, coinsToPesos, GOLD_COIN_VALUE } from "./goldCoinsRouter";
 
 export const orderRouter = createRouter({
@@ -155,6 +155,14 @@ export const orderRouter = createRouter({
       itemsByOrder[item.orderId].push(item);
     }
 
+    // Obtener extras de cada pedido
+    const allExtras = await db.select().from(orderExtras);
+    const extrasByOrder: Record<number, typeof allExtras> = {};
+    for (const extra of allExtras) {
+      if (!extrasByOrder[extra.orderId]) extrasByOrder[extra.orderId] = [];
+      extrasByOrder[extra.orderId].push(extra);
+    }
+
     // Mapear usuarios por ID
     const userById: Record<number, typeof allUsers[0]> = {};
     for (const u of allUsers) userById[u.id] = u;
@@ -166,6 +174,7 @@ export const orderRouter = createRouter({
       revendedorPhone: userById[o.userId]?.phone ?? "",
       adminName: userById[o.adminId]?.name ?? "Sin admin",
       items: itemsByOrder[o.id] || [],
+      extras: extrasByOrder[o.id] || [],
     }));
   }),
 
@@ -189,12 +198,16 @@ export const orderRouter = createRouter({
       const items = await db.select().from(orderItems)
         .where(eq(orderItems.orderId, input.id));
 
+      const extras = await db.select().from(orderExtras)
+        .where(eq(orderExtras.orderId, input.id));
+
       return {
         ...order,
         revendedorName: rev?.name ?? "Desconocido",
         revendedorEmail: rev?.email ?? "",
         revendedorPhone: rev?.phone ?? "",
         items,
+        extras,
       };
     }),
 
@@ -285,14 +298,15 @@ export const orderRouter = createRouter({
     }),
 
   /* ================================================================
-     ADMIN: Cambiar metodo de pago de un pedido pendiente
+     ADMIN: Cambiar metodo de pago de un pedido (pendiente o aprobado)
      ================================================================ */
   updatePaymentType: adminQuery
     .input(z.object({ orderId: z.number(), paymentType: z.enum(["efectivo", "transferencia"]) }))
     .mutation(async ({ input }) => {
       const db = getDb();
       const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId));
-      if (!order || order.status !== "pending") throw new Error("Solo se pueden editar pedidos pendientes");
+      if (!order) throw new Error("Pedido no encontrado");
+      if (order.status === "rejected") throw new Error("No se puede editar un pedido rechazado");
 
       // Obtener todos los items del pedido
       const items = await db.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
@@ -316,6 +330,11 @@ export const orderRouter = createRouter({
         newTotal += newSubtotal;
       }
 
+      // Sumar extras
+      const extras = await db.select().from(orderExtras).where(eq(orderExtras.orderId, input.orderId));
+      const extrasTotal = extras.reduce((sum, e) => sum + Number(e.price), 0);
+      newTotal += extrasTotal;
+
       // Sumar envio si aplica
       if (order.shippingType === "express") {
         newTotal += 5000;
@@ -327,6 +346,70 @@ export const orderRouter = createRouter({
         .where(eq(orders.id, input.orderId));
 
       return { success: true, newTotal, paymentType: input.paymentType };
+    }),
+
+  /* ================================================================
+     ADMIN: Agregar item extra a un pedido (pendiente o aprobado)
+     ================================================================ */
+  addExtra: adminQuery
+    .input(z.object({
+      orderId: z.number(),
+      description: z.string().min(1).max(500),
+      price: z.number().positive(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId));
+      if (!order) throw new Error("Pedido no encontrado");
+      if (order.status === "rejected") throw new Error("No se puede editar un pedido rechazado");
+
+      // Insertar extra
+      await db.insert(orderExtras).values({
+        orderId: input.orderId,
+        description: input.description,
+        price: input.price.toFixed(2),
+      });
+
+      // Recalcular total
+      const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
+      const allExtras = await db.select().from(orderExtras).where(eq(orderExtras.orderId, input.orderId));
+      const itemsTotal = allItems.reduce((sum, i) => sum + Number(i.subtotal), 0);
+      const extrasTotal = allExtras.reduce((sum, e) => sum + Number(e.price), 0);
+      const shippingCost = order.shippingType === "express" ? 5000 : 0;
+      const newTotal = itemsTotal + extrasTotal + shippingCost;
+
+      await db.update(orders)
+        .set({ totalAmount: newTotal.toFixed(2) })
+        .where(eq(orders.id, input.orderId));
+
+      return { success: true, newTotal };
+    }),
+
+  /* ================================================================
+     ADMIN: Eliminar item extra de un pedido
+     ================================================================ */
+  removeExtra: adminQuery
+    .input(z.object({ orderId: z.number(), extraId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId));
+      if (!order) throw new Error("Pedido no encontrado");
+
+      await db.delete(orderExtras).where(eq(orderExtras.id, input.extraId));
+
+      // Recalcular total
+      const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
+      const allExtras = await db.select().from(orderExtras).where(eq(orderExtras.orderId, input.orderId));
+      const itemsTotal = allItems.reduce((sum, i) => sum + Number(i.subtotal), 0);
+      const extrasTotal = allExtras.reduce((sum, e) => sum + Number(e.price), 0);
+      const shippingCost = order.shippingType === "express" ? 5000 : 0;
+      const newTotal = itemsTotal + extrasTotal + shippingCost;
+
+      await db.update(orders)
+        .set({ totalAmount: newTotal.toFixed(2) })
+        .where(eq(orders.id, input.orderId));
+
+      return { success: true, newTotal };
     }),
 
   /* ================================================================

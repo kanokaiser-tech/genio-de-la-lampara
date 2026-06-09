@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router";
+import { lazy, Suspense } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Spinner } from "@/components/ui/spinner";
 import Layout from "@/components/Layout";
@@ -8,7 +9,6 @@ import ProductsPage from "./pages/ProductsPage";
 import CartPage from "./pages/CartPage";
 import OrdersPage from "./pages/OrdersPage";
 import AdminPage from "./pages/AdminPage";
-import DeliveryPage from "@/pages/DeliveryPage";
 import GoldCoinsPage from "./pages/GoldCoinsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import AdminVendorProductsPage from "@/pages/AdminVendorProductsPage";
@@ -17,6 +17,9 @@ import MarketplaceIndexPage from "@/pages/MarketplaceIndexPage";
 import MarketplaceProductDetailPage from "@/pages/MarketplaceProductDetailPage";
 import MyVendorProductsPage from "@/pages/MyVendorProductsPage";
 import NotFound from "./pages/NotFound";
+
+// Lazy loading para paginas pesadas (Leaflet)
+const DeliveryPage = lazy(() => import("@/pages/DeliveryPage"));
 
 function Protected({ children, adminOnly }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { isAuthenticated, isLoading, isAdmin } = useAuth();
@@ -43,7 +46,7 @@ export default function App() {
         <Route path="/mis-publicaciones" element={<Protected><MyVendorProductsPage /></Protected>} />
         <Route path="/admin" element={<Protected adminOnly><AdminPage /></Protected>} />
         <Route path="/admin/vendor-products" element={<Protected adminOnly><AdminVendorProductsPage /></Protected>} />
-        <Route path="/delivery" element={<Protected adminOnly><DeliveryPage /></Protected>} />
+        <Route path="/delivery" element={<Protected adminOnly><Suspense fallback={<div className="flex justify-center py-20"><Spinner className="w-8 h-8 text-blue-600" /></div>}><DeliveryPage /></Suspense></Protected>} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
