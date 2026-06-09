@@ -50,8 +50,8 @@ export default function AdminPage() {
   const { data: salesByAdmin, isLoading: ls } = trpc.order.salesByAdmin.useQuery(undefined, { enabled: isSuperadmin });
   const { data: featuredProducts, refetch: refetchFeatured } = trpc.product.featured.useQuery();
 
-  // Ofertas
-  const [featuredDragged, setFeaturedDragged] = useState<number | null>(null);
+  // Ofertas - selects desplegables
+  const [dealRows, setDealRows] = useState<{ productId: string; dealPrice: string }[]>([{ productId: "", dealPrice: "" }]);
 
   // Mutations
   const cProd = trpc.product.create.useMutation({ onSuccess: () => { utils.product.list.invalidate(); setNewProd({ name: "", category: "", priceList: "", stock: "0" }); } });
@@ -81,9 +81,9 @@ export default function AdminPage() {
   const chPass = trpc.user.changePassword.useMutation({ onSuccess: () => closePassDialog() });
   const upUser = trpc.user.update.useMutation({ onSuccess: () => { utils.user.list.invalidate(); utils.user.listAdmins.invalidate(); utils.user.byRole.invalidate(); setEditing(null); } });
   const upSet = trpc.settings.update.useMutation({ onSuccess: () => utils.settings.get.invalidate() });
-  const setFeatured = trpc.product.setFeatured.useMutation({ onSuccess: () => { utils.product.list.invalidate(); utils.product.featured.invalidate(); } });
-  const removeFeatured = trpc.product.removeFeatured.useMutation({ onSuccess: () => { utils.product.list.invalidate(); utils.product.featured.invalidate(); } });
-  const reorderFeatured = trpc.product.reorderFeatured.useMutation({ onSuccess: () => utils.product.featured.invalidate() });
+  const addDeal = trpc.product.addDeal.useMutation({ onSuccess: () => { utils.product.featured.invalidate(); setDealRows([{ productId: "", dealPrice: "" }]); } });
+  const removeDeal = trpc.product.removeDeal.useMutation({ onSuccess: () => utils.product.featured.invalidate() });
+  const updateDealPrice = trpc.product.updateDealPrice.useMutation({ onSuccess: () => utils.product.featured.invalidate() });
   const sync = trpc.tiendanube.sync.useMutation({ onSuccess: () => utils.product.list.invalidate() });
   const test = trpc.tiendanube.test.useMutation();
   const appr = trpc.order.approve.useMutation({ onSuccess: () => utils.order.myOrdersAsAdmin.invalidate() });
@@ -303,58 +303,115 @@ export default function AdminPage() {
 
         {/* OFERTAS DE LA SEMANA */}
         <TabsContent value="featured" className="space-y-4">
+          {/* Formulario para agregar ofertas */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Star className="w-5 h-5 text-yellow-500" /> Configurar ofertas
+            </h3>
+
+            {dealRows.map((row, idx) => (
+              <div key={idx} className="flex flex-wrap gap-2 items-end mb-2">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-xs text-gray-500 mb-1 block">Producto</label>
+                  <select
+                    value={row.productId}
+                    onChange={e => {
+                      const newRows = [...dealRows];
+                      newRows[idx].productId = e.target.value;
+                      setDealRows(newRows);
+                    }}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  >
+                    <option value="">Seleccionar producto...</option>
+                    {products?.filter((p: any) => !featuredProducts?.some((f: any) => f.id === p.id) || String(p.id) === row.productId).sort((a: any, b: any) => a.name.localeCompare(b.name)).map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.name} (Lista: ${Number(p.priceList).toLocaleString()})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-32">
+                  <label className="text-xs text-gray-500 mb-1 block">Precio oferta</label>
+                  <input
+                    type="number"
+                    value={row.dealPrice}
+                    onChange={e => {
+                      const newRows = [...dealRows];
+                      newRows[idx].dealPrice = e.target.value;
+                      setDealRows(newRows);
+                    }}
+                    placeholder="35000"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 font-bold"
+                  />
+                </div>
+                {idx === dealRows.length - 1 ? (
+                  <button
+                    onClick={() => {
+                      if (row.productId && row.dealPrice) {
+                        addDeal.mutate({
+                          productId: Number(row.productId),
+                          dealPrice: parseFloat(row.dealPrice),
+                        });
+                      }
+                    }}
+                    disabled={!row.productId || !row.dealPrice || addDeal.isPending}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {addDeal.isPending ? "..." : "Agregar"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setDealRows(dealRows.filter((_, i) => i !== idx))}
+                    className="px-3 py-2 text-red-500 hover:bg-red-50 rounded-lg text-sm"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+
+            <button
+              onClick={() => setDealRows([...dealRows, { productId: "", dealPrice: "" }])}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" /> Agregar otra oferta
+            </button>
+          </div>
+
+          {/* Lista de ofertas activas */}
           <div className="flex justify-between items-center">
-            <p className="text-sm text-gray-500">{featuredProducts?.length ?? 0} productos en ofertas</p>
-            <p className="text-xs text-gray-400">Arrastra para reordenar</p>
+            <p className="text-sm text-gray-500">{featuredProducts?.length ?? 0} ofertas activas</p>
           </div>
           {!featuredProducts || featuredProducts.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 text-sm">
-              No hay productos destacados. Ve a la pestaña Productos y marca algunos con la estrella.
+            <div className="text-center py-10 text-gray-400 text-sm bg-gray-50 rounded-xl">
+              No hay ofertas configuradas. Usa el formulario de arriba para agregar.
             </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="hidden md:grid grid-cols-[40px,48px,1fr,120px,80px,80px,80px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
-                <span></span><span></span><span>Nombre</span><span>Categoria</span><span className="text-right">Efectivo</span><span className="text-right">Transfer</span><span className="text-center">Accion</span>
+              <div className="hidden md:grid grid-cols-[48px,1fr,120px,100px,100px,80px,60px] gap-3 px-4 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase items-center">
+                <span></span><span>Producto</span><span>Categoria</span><span className="text-right">Precio normal</span><span className="text-right text-red-500">Precio oferta</span><span className="text-center">Tipo</span><span></span>
               </div>
-              {featuredProducts.map((p: any, idx: number) => (
-                <div
-                  key={p.id}
-                  draggable
-                  onDragStart={() => setFeaturedDragged(idx)}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (featuredDragged === null || featuredDragged === idx) return;
-                    const newOrder = featuredProducts.map((_: any, i: number) => i);
-                    const [moved] = newOrder.splice(featuredDragged, 1);
-                    newOrder.splice(idx, 0, moved);
-                    setFeaturedDragged(idx);
-                  }}
-                  onDragEnd={() => {
-                    if (featuredDragged !== null) {
-                      const newOrder = featuredProducts.map((_: any, i: number) => ({ id: featuredProducts[i].id, order: i }));
-                      reorderFeatured.mutate({ orders: newOrder });
-                    }
-                    setFeaturedDragged(null);
-                  }}
-                  className={`grid grid-cols-[40px,48px,1fr,120px,80px,80px,80px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm ${featuredDragged === idx ? "bg-blue-50" : ""}`}
-                >
-                  <GripVertical className="w-4 h-4 text-gray-400 cursor-move" />
+              {featuredProducts.map((p: any) => (
+                <div key={p.id} className="grid grid-cols-[48px,1fr,120px,100px,100px,80px,60px] gap-3 px-4 py-3 border-t border-gray-100 items-center text-sm">
                   <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
                     {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy" /> : <ImageOff className="w-4 h-4 text-gray-300" />}
                   </div>
                   <span className="truncate text-gray-900 font-medium">{p.name}</span>
                   <span className="text-xs text-gray-500">{p.category}</span>
-                  <span className="text-right font-medium text-blue-600">{formatPrice(Number(p.priceCash30))}</span>
-                  <span className="text-right text-xs text-gray-500">{formatPrice(Number(p.priceTransfer25))}</span>
-                  <div className="text-center">
-                    <button
-                      onClick={() => removeFeatured.mutate({ id: p.id })}
-                      className="text-yellow-500 hover:text-red-500 transition-colors"
-                      title="Quitar de ofertas"
-                    >
-                      <Star className="w-5 h-5 fill-yellow-400" />
-                    </button>
-                  </div>
+                  <span className="text-right text-xs text-gray-400 line-through">
+                    {formatPrice(Number(p.dealType === "transfer" ? p.priceTransfer25 : p.priceCash30))}
+                  </span>
+                  <span className="text-right font-bold text-red-600 text-base">
+                    {formatPrice(Number(p.dealPrice))}
+                  </span>
+                  <span className="text-center text-xs text-gray-500">
+                    {p.dealType === "transfer" ? "Transf." : "Efectivo"}
+                  </span>
+                  <button
+                    onClick={() => { if (confirm("Quitar esta oferta?")) removeDeal.mutate({ productId: p.id }); }}
+                    className="text-red-400 hover:text-red-600 p-1"
+                    title="Eliminar oferta"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
             </div>

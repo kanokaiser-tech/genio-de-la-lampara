@@ -73,16 +73,19 @@ export const productRouter = createRouter({
     }),
 
   /* ================================================================
-     OFERTAS DE LA SEMANA - Productos destacados por admin
+     OFERTAS DE LA SEMANA - Productos destacados por admin con precio de oferta
      ================================================================ */
   featured: publicQuery.query(async () => {
     const db = getDb();
     const [rows] = await db.execute(`
-      SELECT id, name, category, priceList, priceCash30, priceTransfer25, stock,
-             imageUrl, slug, isFeatured, featuredOrder, viewCount
-      FROM products
-      WHERE active = true AND isFeatured = true
-      ORDER BY featuredOrder ASC, id DESC
+      SELECT 
+        p.id, p.name, p.category, p.priceList, p.priceCash30, p.priceTransfer25, 
+        p.stock, p.imageUrl, p.slug, p.viewCount,
+        fd.dealPrice, fd.dealType, fd.displayOrder
+      FROM products p
+      JOIN featuredDeals fd ON p.id = fd.productId
+      WHERE p.active = true
+      ORDER BY fd.displayOrder ASC, fd.createdAt DESC
       LIMIT 20
     `);
     return rows;
@@ -168,44 +171,68 @@ export const productRouter = createRouter({
   }),
 
   /* ================================================================
-     SET FEATURED - Marcar producto como oferta (admin)
+     ADD DEAL - Agregar producto a ofertas (admin)
      ================================================================ */
-  setFeatured: adminQuery
-    .input(z.object({ id: z.number(), order: z.number().optional() }))
+  addDeal: adminQuery
+    .input(z.object({
+      productId: z.number(),
+      dealPrice: z.number().positive(),
+      dealType: z.enum(["cash", "transfer"]).optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const order = input.order ?? 0;
       await db.execute(`
-        UPDATE products SET isFeatured = true, featuredOrder = ${order}
-        WHERE id = ${input.id}
+        INSERT INTO featuredDeals (productId, dealPrice, dealType, displayOrder)
+        VALUES (${input.productId}, ${input.dealPrice.toFixed(2)}, '${input.dealType || "cash"}',
+          (SELECT COALESCE(MAX(displayOrder), 0) + 1 FROM featuredDeals fd2))
+        ON DUPLICATE KEY UPDATE
+          dealPrice = ${input.dealPrice.toFixed(2)},
+          dealType = '${input.dealType || "cash"}'
       `);
       return { success: true };
     }),
 
   /* ================================================================
-     REMOVE FEATURED - Quitar producto de ofertas (admin)
+     REMOVE DEAL - Quitar producto de ofertas (admin)
      ================================================================ */
-  removeFeatured: adminQuery
-    .input(z.object({ id: z.number() }))
+  removeDeal: adminQuery
+    .input(z.object({ productId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.execute(`DELETE FROM featuredDeals WHERE productId = ${input.productId}`);
+      return { success: true };
+    }),
+
+  /* ================================================================
+     UPDATE DEAL PRICE - Cambiar precio de una oferta (admin)
+     ================================================================ */
+  updateDealPrice: adminQuery
+    .input(z.object({
+      productId: z.number(),
+      dealPrice: z.number().positive(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
       await db.execute(`
-        UPDATE products SET isFeatured = false, featuredOrder = 0
-        WHERE id = ${input.id}
+        UPDATE featuredDeals SET dealPrice = ${input.dealPrice.toFixed(2)}
+        WHERE productId = ${input.productId}
       `);
       return { success: true };
     }),
 
   /* ================================================================
-     REORDER FEATURED - Cambiar orden de ofertas (admin)
+     REORDER DEALS - Cambiar orden de ofertas (admin)
      ================================================================ */
-  reorderFeatured: adminQuery
-    .input(z.object({ orders: z.array(z.object({ id: z.number(), order: z.number() })) }))
+  reorderDeals: adminQuery
+    .input(z.object({
+      orders: z.array(z.object({ productId: z.number(), order: z.number() })),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
       for (const item of input.orders) {
         await db.execute(`
-          UPDATE products SET featuredOrder = ${item.order} WHERE id = ${item.id}
+          UPDATE featuredDeals SET displayOrder = ${item.order}
+          WHERE productId = ${item.productId}
         `);
       }
       return { success: true };

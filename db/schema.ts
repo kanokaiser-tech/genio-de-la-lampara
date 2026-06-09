@@ -79,6 +79,20 @@ export const userCategoryViews = mysqlTable("userCategoryViews", {
 
 export type UserCategoryView = typeof userCategoryViews.$inferSelect;
 
+/* ------------------------------------------------------------------ */
+/*  FeaturedDeals - Ofertas de la semana (admin configura)            */
+/* ------------------------------------------------------------------ */
+export const featuredDeals = mysqlTable("featuredDeals", {
+  id: serial("id").primaryKey(),
+  productId: bigint("productId", { mode: "number", unsigned: true }).notNull(),
+  dealPrice: decimal("dealPrice", { precision: 12, scale: 2 }).notNull(),
+  dealType: mysqlEnum("dealType", ["cash", "transfer"]).default("cash"),
+  displayOrder: int("displayOrder").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FeaturedDeal = typeof featuredDeals.$inferSelect;
+
 export const orders = mysqlTable("orders", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
