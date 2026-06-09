@@ -14,6 +14,7 @@ import ProfilePage from "@/pages/ProfilePage";
 import AdminVendorProductsPage from "@/pages/AdminVendorProductsPage";
 import VendorPublishPage from "@/pages/VendorPublishPage";
 import MarketplaceIndexPage from "@/pages/MarketplaceIndexPage";
+import MarketplaceProductDetailPage from "@/pages/MarketplaceProductDetailPage";
 import MyVendorProductsPage from "@/pages/MyVendorProductsPage";
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/perfil" element={<Protected><ProfilePage /></Protected>} />
         <Route path="/publicar" element={<Protected><VendorPublishPage /></Protected>} />
         <Route path="/marketplace" element={<Protected><MarketplaceIndexPage /></Protected>} />
+        <Route path="/marketplace/:id" element={<Protected><MarketplaceProductDetailPage /></Protected>} />
         <Route path="/mis-publicaciones" element={<Protected><MyVendorProductsPage /></Protected>} />
         <Route path="/admin" element={<Protected adminOnly><AdminPage /></Protected>} />
         <Route path="/admin/vendor-products" element={<Protected adminOnly><AdminVendorProductsPage /></Protected>} />

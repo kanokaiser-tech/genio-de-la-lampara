@@ -118,6 +118,21 @@ export const vendorProductRouter = createRouter({
     return { success: true };
   }),
 
+  getById: publicQuery
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      const [rows] = await db.execute(
+        `SELECT vp.*, u.name as vendorName, u.email as vendorEmail, u.phone as userPhone 
+         FROM vendor_products vp 
+         JOIN users u ON vp.user_id = u.id 
+         WHERE vp.id = ${input.id}`
+      );
+      const product = (rows as any[])[0];
+      if (!product) throw new Error('Producto no encontrado');
+      return product;
+    }),
+
   delete: authedQuery.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const db = getDb();
     const [rows] = await db.execute(`SELECT user_id, images FROM vendor_products WHERE id = ${input.id}`);

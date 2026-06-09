@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { 
   Search, Plus, X, Trash2, CheckCircle, XCircle,
@@ -26,6 +27,7 @@ const CATEGORIES = [
 ];
 
 export default function MarketplaceIndexPage() {
+  const navigate = useNavigate();
   const { user, isAdmin, isSuperadmin } = useAuth();
   const [showTerms, setShowTerms] = useState(false);
   const [activeTab, setActiveTab] = useState<"explorar" | "mis-publicaciones" | "aprobar">("explorar");
@@ -324,7 +326,11 @@ export default function MarketplaceIndexPage() {
                   const imageUrl = getImageUrl(product.images);
                   const contactPhone = product.vendor_phone || (product as any).userPhone;
                   return (
-                    <Card key={product.id} className="card-hover overflow-hidden rounded-xl fade-in">
+                    <Card
+                      key={product.id}
+                      className="card-hover overflow-hidden rounded-xl fade-in cursor-pointer"
+                      onClick={() => navigate(`/marketplace/${product.id}`)}
+                    >
                       {imageUrl ? (
                         <div className="aspect-square overflow-hidden bg-gray-100">
                           <img src={imageUrl} alt={product.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
@@ -348,7 +354,10 @@ export default function MarketplaceIndexPage() {
                           </div>
                           {contactPhone && (
                             <button
-                              onClick={() => openWhatsApp(contactPhone, product.title, product.price)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openWhatsApp(contactPhone, product.title, product.price);
+                              }}
                               className="btn-whatsapp p-2 rounded-full w-8 h-8 flex items-center justify-center"
                             >
                               <Phone className="w-4 h-4" />

@@ -6,9 +6,9 @@ export const uploadRouter = new Hono();
 
 uploadRouter.post("/images", async (c) => {
   try {
-    const body = await c.req.parseBody();
+    const body = await c.req.parseBody({ all: true });
     const files = body["images"];
-    const fileArray = Array.isArray(files) ? files : [files];
+    const fileArray = Array.isArray(files) ? files : files ? [files] : [];
     
     const uploadDir = join(process.cwd(), "public", "uploads");
     if (!existsSync(uploadDir)) {
