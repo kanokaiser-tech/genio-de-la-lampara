@@ -8,9 +8,10 @@ interface TnProduct {
   id: number;
   name: Record<string, string> | string;
   handle?: Record<string, string> | string;
+  description?: Record<string, string> | string;
   variants?: Array<{ id?: number; price?: number | string; stock?: number | null }>;
   categories?: Array<{ name: Record<string, string> | string }>;
-  images?: Array<{ src?: string }>;
+  images?: Array<{ id?: number; src?: string; position?: number }>;
   published?: boolean;
 }
 
@@ -91,9 +92,14 @@ export const tiendanubeRouter = createRouter({
       if (!slug) continue;
       seenSlugs.push(slug);
 
+      // Extraer descripcion e imagenes
+      const description = getTranslation(tnProduct.description);
+      const imagesArray = (tnProduct.images || []).map(img => img.src).filter(Boolean);
+      const imagesJson = imagesArray.length > 0 ? JSON.stringify(imagesArray) : null;
+
       await getDb().execute(sql`
-        INSERT INTO products (name, priceList, priceCash30, priceTransfer25, category, stock, imageUrl, slug, tiendanubeId, tiendanubeVariantId, active, is_new)
-        VALUES (${name}, ${originalPrice.toFixed(2)}, ${priceCash30.toFixed(2)}, ${priceTransfer25.toFixed(2)}, ${category}, ${tnStock}, ${imageUrl}, ${slug}, ${String(tnProduct.id)}, ${variantId}, TRUE, TRUE)
+        INSERT INTO products (name, priceList, priceCash30, priceTransfer25, category, stock, imageUrl, imagesJson, description, slug, tiendanubeId, tiendanubeVariantId, active, is_new)
+        VALUES (${name}, ${originalPrice.toFixed(2)}, ${priceCash30.toFixed(2)}, ${priceTransfer25.toFixed(2)}, ${category}, ${tnStock}, ${imageUrl}, ${imagesJson}, ${description}, ${slug}, ${String(tnProduct.id)}, ${variantId}, TRUE, TRUE)
         ON DUPLICATE KEY UPDATE
           name = VALUES(name),
           priceList = VALUES(priceList),
@@ -102,6 +108,8 @@ export const tiendanubeRouter = createRouter({
           category = VALUES(category),
           stock = VALUES(stock),
           imageUrl = VALUES(imageUrl),
+          imagesJson = VALUES(imagesJson),
+          description = VALUES(description),
           tiendanubeId = VALUES(tiendanubeId),
           tiendanubeVariantId = VALUES(tiendanubeVariantId),
           active = TRUE

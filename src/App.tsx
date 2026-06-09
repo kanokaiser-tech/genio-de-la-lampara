@@ -13,6 +13,7 @@ import GoldCoinsPage from "./pages/GoldCoinsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import AdminVendorProductsPage from "@/pages/AdminVendorProductsPage";
 import VendorPublishPage from "@/pages/VendorPublishPage";
+import ProductDetailPage from "@/pages/ProductDetailPage";
 import MarketplaceIndexPage from "@/pages/MarketplaceIndexPage";
 import MarketplaceProductDetailPage from "@/pages/MarketplaceProductDetailPage";
 import MyVendorProductsPage from "@/pages/MyVendorProductsPage";
@@ -35,6 +36,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
+        <Route path="/productos/:slug" element={<Protected><ProductDetailPage /></Protected>} />
         <Route path="/productos" element={<Protected><ProductsPage /></Protected>} />
         <Route path="/pedido" element={<Protected><CartPage /></Protected>} />
         <Route path="/mis-pedidos" element={<Protected><OrdersPage /></Protected>} />

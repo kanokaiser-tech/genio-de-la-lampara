@@ -28,6 +28,27 @@ export const productRouter = createRouter({
     return rows;
   }),
 
+  /* ================================================================
+     DETAIL - Obtener producto por ID con imagenes y descripcion
+     ================================================================ */
+  detail: publicQuery.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    const db = getDb();
+    const [rows] = await db.execute(`
+      SELECT id, name, category, description, priceList, priceCash30, priceTransfer25, stock,
+             imageUrl, imagesJson, slug, is_new, createdAt
+      FROM products WHERE id = ${input.id} AND active = true
+    `);
+    const product = (rows as any[])[0];
+    if (!product) throw new Error("Producto no encontrado");
+    // Parsear imagesJson a array
+    if (product.imagesJson) {
+      try { product.images = JSON.parse(product.imagesJson); } catch { product.images = []; }
+    } else {
+      product.images = product.imageUrl ? [product.imageUrl] : [];
+    }
+    return product;
+  }),
+
   create: adminQuery.input(z.object({
     name: z.string().min(1),
     category: z.string().min(1),

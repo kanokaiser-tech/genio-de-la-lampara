@@ -36,7 +36,9 @@ export const products = mysqlTable("products", {
   priceCash30: decimal("priceCash30", { precision: 12, scale: 2 }).notNull(),
   priceTransfer25: decimal("priceTransfer25", { precision: 12, scale: 2 }).notNull(),
   stock: int("stock").default(0).notNull(),
-  imageUrl: text("imageUrl"),
+  imageUrl: text("imageUrl"), // Imagen principal (para compatibilidad)
+  imagesJson: text("imagesJson"), // Array JSON con todas las imagenes de Tiendanube
+  description: text("description"), // Descripcion HTML del producto
   tiendanubeId: varchar("tiendanubeId", { length: 100 }), // ID del producto en TN
   tiendanubeVariantId: varchar("tiendanubeVariantId", { length: 100 }), // ID de la variante en TN (para stock)
   slug: varchar("slug", { length: 500 }).unique(),
