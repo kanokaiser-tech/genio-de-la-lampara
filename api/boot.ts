@@ -8,6 +8,9 @@ import { env } from "./lib/env";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 import { spawn } from "child_process";
+import { restApi } from "./restApi";
+import { aiModeration } from "./aiModeration";
+import { uploadRouter } from "./uploadRouter";
 
 const RESTART_TOKEN = "genio-restart-8f3k9m2p7q4r6t1w";
 
@@ -15,8 +18,7 @@ const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 
-// Endpoint de reinicio de emergencia - accesible desde cualquier entorno sin SSH
-// Uso: POST /api/restart { "token": "genio-restart-8f3k9m2p7q4r6t1w" }
+// Endpoint de reinicio de emergencia
 app.post("/api/restart", async (c) => {
   try {
     const body = await c.req.json();
@@ -24,7 +26,6 @@ app.post("/api/restart", async (c) => {
       return c.json({ error: "Invalid token" }, 403);
     }
 
-    // Lanzar reinicio en background (independiente de este proceso)
     const child = spawn(
       "bash",
       ["-c", `
@@ -42,7 +43,7 @@ app.post("/api/restart", async (c) => {
 
     return c.json({
       success: true,
-      message: "Restarting in 3-5 seconds. Check https://geniorevendedores.geniodelalampara.com/",
+      message: "Restarting in 3-5 seconds",
       status: "restarting"
     });
   } catch {
@@ -50,12 +51,20 @@ app.post("/api/restart", async (c) => {
   }
 });
 
-// Endpoint de health check simple (para verificar si esta vivo)
+// Health check
 app.get("/api/health", (c) => {
   return c.json({ status: "ok", time: new Date().toISOString() });
 });
 
+// REST API para n8n/DeepSeek
+app.route("/api/rest", restApi);
+app.route("/api/ai", aiModeration);
+app.route("/api/upload", uploadRouter);
+
+// OAuth callback
 app.get(Paths.oauthCallback, async (c) => createOAuthCallbackHandler(c));
+
+// tRPC endpoints
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
@@ -64,6 +73,7 @@ app.use("/api/trpc/*", async (c) => {
     createContext,
   });
 });
+
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 export default app;
@@ -77,12 +87,31 @@ if (env.isProduction) {
   serve({ fetch: app.fetch, port }, async () => {
     console.log(`Server running on http://localhost:${port}/`);
 
-    // Ejecutar migraciones de base de datos
     const { runMigrations } = await import("./migrations/run_migrations");
-    await runMigrations();
-
-    // NOTA: Sync automatico DESACTIVADO. Solo sync manual desde el panel de admin.
-    // const { startSyncJob } = await import("./syncJob");
-    // startSyncJob();
+    // await runMigrations();
   });
 }
+
+// Servir archivos de uploads (imágenes)
+app.get("/uploads/:filename", async (c) => {
+  const filename = c.req.param("filename");
+  const fs = await import("fs");
+  const path = await import("path");
+  const filePath = path.join(process.cwd(), "public", "uploads", filename);
+  
+  if (fs.existsSync(filePath)) {
+    const file = fs.readFileSync(filePath);
+    const ext = path.extname(filename).toLowerCase();
+    const contentType = {
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".gif": "image/gif",
+      ".webp": "image/webp",
+    }[ext] || "application/octet-stream";
+    
+    c.header("Content-Type", contentType);
+    return c.body(file);
+  }
+  return c.json({ error: "File not found" }, 404);
+});

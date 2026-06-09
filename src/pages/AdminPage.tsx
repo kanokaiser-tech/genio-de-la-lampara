@@ -62,6 +62,9 @@ export default function AdminPage() {
     }
   });
   const upCat = trpc.product.updateCategory.useMutation({ onSuccess: () => utils.product.list.invalidate() });
+  const updateLocation = trpc.product.updateLocation.useMutation({
+    onSuccess: () => utils.product.list.invalidate(),
+  });
   const cAdmin = trpc.user.createAdmin.useMutation({ onSuccess: () => { utils.user.listAdmins.invalidate(); setNewAdmin({ name: "", email: "", phone: "", password: "" }); } });
   const cSuperadmin = trpc.user.createSuperadmin.useMutation({
     onSuccess: () => {
@@ -217,6 +220,47 @@ export default function AdminPage() {
                       ))}
                     </select>
                     <span className={`text-center font-bold ${stockColor}`}>{stockNum}</span>
+                    <div className="flex items-center gap-1">
+  <select
+    value={p.location?.startsWith("Caja-") ? "box" : "shelf"}
+    onChange={(e) => {
+      if (e.target.value === "shelf") updateLocation.mutate({ id: p.id, location: "A1" });
+      else updateLocation.mutate({ id: p.id, location: "Caja-1" });
+    }}
+    className="h-8 text-xs bg-gray-50 border border-gray-300 rounded px-1"
+  >
+    <option value="shelf">📦 Estante</option>
+    <option value="box">📦 Caja</option>
+  </select>
+  
+  {!p.location?.startsWith("Caja-") ? (
+    <>
+      <select
+        value={(p.location || "A1").match(/^([A-J])/)?.[1] || "A"}
+        onChange={(e) => updateLocation.mutate({ id: p.id, location: e.target.value + (p.location?.slice(-1) || "1") })}
+        className="w-12 h-8 text-center bg-gray-50 border border-gray-300 rounded"
+      >
+        {["A","B","C","D","E","F","G","H","I","J"].map(l => <option key={l} value={l}>{l}</option>)}
+      </select>
+      <select
+        value={parseInt((p.location || "A1").match(/([1-5])$/)?.[1] || "1")}
+        onChange={(e) => updateLocation.mutate({ id: p.id, location: (p.location?.charAt(0) || "A") + e.target.value })}
+        className="w-12 h-8 text-center bg-gray-50 border border-gray-300 rounded"
+      >
+        {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </>
+  ) : (
+    <select
+      value={parseInt((p.location || "Caja-1").replace("Caja-", ""))}
+      onChange={(e) => updateLocation.mutate({ id: p.id, location: "Caja-" + e.target.value })}
+      className="w-16 h-8 text-center bg-gray-50 border border-gray-300 rounded"
+    >
+      {[...Array(20)].map((_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
+    </select>
+  )}
+  <span className="text-xs font-mono bg-gray-100 px-1 rounded">{p.location || "A1"}</span>
+</div>
                     <span className="text-right text-gray-400 line-through">{formatPrice(p.priceList)}</span>
                     <span className="text-right text-blue-600 font-medium">{formatPrice(p.priceCash30)}</span>
                     <span className="text-right text-green-600">{formatPrice(p.priceTransfer25)}</span>
@@ -562,7 +606,12 @@ export default function AdminPage() {
                         <div className="space-y-2 mb-4">
                           {orderDetail?.items && orderDetail.items.length > 0 ? orderDetail.items.map((item: any) => (
                             <div key={item.id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2 text-sm">
-                              <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="text-gray-900 truncate">{item.productName}</span>
+                                <span className="text-xs text-blue-600 font-mono bg-white px-1.5 py-0.5 rounded border border-blue-200">
+                                  📍 {products?.find(p => p.name === item.productName)?.location || "Sin ubicación"}
+                                </span>
+                              </div>
                               <span className="text-blue-600 font-medium w-20 text-right shrink-0">{formatPrice(item.price)}</span>
                               <div className="flex items-center gap-1 shrink-0">
                                 <button onClick={(e) => { e.stopPropagation(); if (item.quantity > 1) upItem.mutate({ orderId: o.id, itemId: item.id, quantity: item.quantity - 1 }); }} className="w-7 h-7 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-sm font-bold">-</button>
@@ -590,6 +639,14 @@ export default function AdminPage() {
                             </div>
                             <button onClick={(e) => { e.stopPropagation(); if (addProductId) { addItem.mutate({ orderId: o.id, productId: Number(addProductId), quantity: Number(addQty) }); } }} disabled={!addProductId || addItem.isPending} className="px-3 py-1.5 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
                               {addItem.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+
+                          {/* Payment type toggle */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <span className="text-xs text-gray-500">Metodo de pago:</span>
+                            <button onClick={(e) => { e.stopPropagation(); chPay.mutate({ orderId: o.id, paymentType: o.paymentType === "efectivo" ? "transferencia" : "efectivo" }); }} className={`px-2 py-1 rounded text-xs font-bold border ${o.paymentType === "efectivo" ? "bg-blue-100 text-blue-700 border-blue-300" : "bg-green-100 text-green-700 border-green-300"}`}>
+                              {o.paymentType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}
                             </button>
                           </div>
 
@@ -650,12 +707,29 @@ export default function AdminPage() {
                     <div className="flex items-center gap-3">
                       {/* Estado pago */}
                       {o.status === "approved" && (
-                        <button
-                          onClick={e => { e.stopPropagation(); togglePaid.mutate({ id: o.id }); }}
-                          className={`px-2 py-1 rounded text-xs font-bold ${o.paid ? "bg-green-100 text-green-700 border border-green-300" : "bg-red-100 text-red-700 border border-red-300"}`}
-                        >
-                          {o.paid ? "Pagado" : "Pendiente"}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={e => { e.stopPropagation(); 
+                              const newType = o.paymentType === "efectivo" ? "transferencia" : "efectivo";
+                              if (confirm(`¿Cambiar método de pago a ${newType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}?`)) {
+                                chPay.mutate({ orderId: o.id, paymentType: newType });
+                              }
+                            }}
+                            className={`px-2 py-1 rounded text-xs font-bold ${
+                              o.paymentType === "efectivo" 
+                                ? "bg-blue-100 text-blue-700 border border-blue-300" 
+                                : "bg-green-100 text-green-700 border border-green-300"
+                            }`}
+                          >
+                            {o.paymentType === "efectivo" ? "💰 Efectivo" : "💳 Transferencia"}
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); togglePaid.mutate({ id: o.id }); }}
+                            className={`px-2 py-1 rounded text-xs font-bold ${o.paid ? "bg-green-100 text-green-700 border border-green-300" : "bg-red-100 text-red-700 border border-red-300"}`}
+                          >
+                            {o.paid ? "Pagado" : "Pendiente"}
+                          </button>
+                        </div>
                       )}
                       {(o as any).isOld && <Badge className="bg-orange-100 text-orange-700 border-orange-300 text-xs">Dia anterior</Badge>}
                       <div className="text-left">
@@ -708,8 +782,14 @@ export default function AdminPage() {
                           {/* Edit each item */}
                           {orderDetail?.items && orderDetail.items.length > 0 ? orderDetail.items.map((item: any) => (
                             <div key={item.id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2 text-sm">
-                              <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
-                              <span className="text-blue-600 font-medium w-20 text-right shrink-0">{formatPrice(item.price)}</span>
+                              <div className="flex items-center gap-2 flex-1">
+                  <span className="text-gray-900 truncate">{item.productName}</span>
+                  <span className="text-xs text-blue-600 font-mono bg-blue-50 px-1.5 py-0.5 rounded">
+                    📍 {products?.find(p => p.name === item.productName)?.location || "Sin ubicación"}
+                  </span>
+                </div>
+                <span className="text-blue-600 font-medium w-20 text-right shrink-0">{formatPrice(item.price)}</span>
+                              <span className="text-xs text-gray-400 w-16 text-center shrink-0">📍 {products?.find(p => p.name === item.productName)?.location || "Sin ubicación"}</span>
                               {/* Quantity controls */}
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
@@ -791,7 +871,12 @@ export default function AdminPage() {
                             <div className="space-y-2 mb-4">
                               {(o.items as any[]).map((item: any) => (
                                 <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 text-sm">
-                                  <span className="flex-1 text-gray-900 truncate">{item.productName}</span>
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <span className="text-gray-900 truncate">{item.productName}</span>
+                                    <span className="text-xs text-blue-600 font-mono bg-blue-50 px-1.5 py-0.5 rounded">
+                                      📍 {products?.find(p => p.name === item.productName)?.location || "Sin ubicación"}
+                                    </span>
+                                  </div>
                                   <span className="text-blue-600 font-medium w-20 text-right">{formatPrice(item.price)}</span>
                                   <span className="text-gray-500 w-8 text-center">x{item.quantity}</span>
                                 </div>
@@ -800,13 +885,31 @@ export default function AdminPage() {
                           ) : <p className="text-sm text-gray-400 mb-3">No hay productos</p>}
 
                           {/* Boton anular — solo superadmin */}
-                          {o.status === "approved" && isSuperadmin && (
-                            <div className="flex gap-2">
+                          <div className="flex gap-2 items-center">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Método de pago:</span>
+                              <button
+                                onClick={() => {
+                                  const newType = o.paymentType === "efectivo" ? "transferencia" : "efectivo";
+                                  if (confirm(`¿Cambiar método de pago a ${newType === "efectivo" ? "Efectivo (-30%)" : "Transferencia (-25%)"}?`)) {
+                                    chPay.mutate({ orderId: o.id, paymentType: newType });
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${
+                                  o.paymentType === "efectivo" 
+                                    ? "bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200" 
+                                    : "bg-green-100 text-green-700 border border-green-300 hover:bg-green-200"
+                                }`}
+                              >
+                                {o.paymentType === "efectivo" ? "💰 Efectivo (-30%)" : "💳 Transferencia (-25%)"}
+                              </button>
+                            </div>
+                            {o.status === "approved" && isSuperadmin && (
                               <Button size="sm" variant="outline" onClick={() => { if (confirm('ANULAR? Se devuelve stock a Tiendanube y monedas.')) rej.mutate({ id: o.id }); }} className="border-red-300 text-red-600 hover:bg-red-50">
                                 <Trash2 className="w-3.5 h-3.5 mr-1" /> Anular pedido
                               </Button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
@@ -1183,6 +1286,93 @@ export default function AdminPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+// Componente de selector de ubicación
+function LocationSelector({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+  const [type, setType] = useState<'shelf' | 'box'>('shelf');
+  const [letter, setLetter] = useState('A');
+  const [number, setNumber] = useState(1);
+  const [boxNumber, setBoxNumber] = useState(1);
+  
+  // Parsear valor existente (ej: "B3" o "Caja-15")
+  useEffect(() => {
+    if (value) {
+      if (value.startsWith('Caja-')) {
+        setType('box');
+        setBoxNumber(parseInt(value.replace('Caja-', '')) || 1);
+      } else {
+        setType('shelf');
+        const match = value.match(/^([A-J])([1-5])$/);
+        if (match) {
+          setLetter(match[1]);
+          setNumber(parseInt(match[2]));
+        }
+      }
+    }
+  }, [value]);
+  
+  // Generar código final
+  const getCode = () => {
+    if (type === 'shelf') {
+      return `${letter}${number}`;
+    } else {
+      return `Caja-${boxNumber}`;
+    }
+  };
+  
+  // Notificar cambios
+  useEffect(() => {
+    onChange(getCode());
+  }, [type, letter, number, boxNumber]);
+  
+  return (
+    <div className="flex items-center gap-1">
+      <select 
+        value={type} 
+        onChange={(e) => setType(e.target.value as 'shelf' | 'box')}
+        className="h-8 text-xs bg-gray-50 border border-gray-300 rounded px-1"
+      >
+        <option value="shelf">📦 Estante</option>
+        <option value="box">📦 Caja</option>
+      </select>
+      
+      {type === 'shelf' ? (
+        <>
+          <select 
+            value={letter} 
+            onChange={(e) => setLetter(e.target.value)}
+            className="w-12 h-8 text-center bg-gray-50 border border-gray-300 rounded"
+          >
+            {['A','B','C','D','E','F','G','H','I','J'].map(l => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          <select 
+            value={number} 
+            onChange={(e) => setNumber(parseInt(e.target.value))}
+            className="w-12 h-8 text-center bg-gray-50 border border-gray-300 rounded"
+          >
+            {[1,2,3,4,5].map(n => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </>
+      ) : (
+        <select 
+          value={boxNumber} 
+          onChange={(e) => setBoxNumber(parseInt(e.target.value))}
+          className="w-16 h-8 text-center bg-gray-50 border border-gray-300 rounded"
+        >
+          {[...Array(20)].map((_, i) => (
+            <option key={i+1} value={i+1}>{i+1}</option>
+          ))}
+        </select>
+      )}
+      <span className="text-xs font-mono bg-gray-100 px-1 rounded">
+        {getCode()}
+      </span>
     </div>
   );
 }

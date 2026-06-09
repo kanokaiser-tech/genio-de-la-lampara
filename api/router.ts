@@ -6,6 +6,8 @@ import { cartRouter } from "./cartRouter";
 import { settingsRouter } from "./settingsRouter";
 import { tiendanubeRouter } from "./tiendanubeRouter";
 import { goldCoinsRouter } from "./goldCoinsRouter";
+import { vendorProductRouter } from './vendorProductRouter';
+import { logisticsRouter } from "./logisticsRouter";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -18,6 +20,8 @@ export const appRouter = createRouter({
   settings: settingsRouter,
   tiendanube: tiendanubeRouter,
   goldCoins: goldCoinsRouter,
+  vendorProducts: vendorProductRouter,
+logistics: logisticsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -10,10 +10,13 @@ export type TrpcContext = {
 
 export async function createContext(opts: FetchCreateContextFnOptions): Promise<TrpcContext> {
   const ctx: TrpcContext = { req: opts.req, resHeaders: opts.resHeaders };
+  
   try {
+    // Autenticación normal por sesión/token
     ctx.user = (await authenticateRequest(opts.req.headers)) ?? undefined;
   } catch {
     // Auth is optional
   }
+  
   return ctx;
 }

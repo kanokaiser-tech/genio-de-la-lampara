@@ -122,15 +122,20 @@ export default function OrdersPage() {
               <button onClick={() => setExpanded(isExp ? null : order.id)} className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50">
                 <div className="flex items-center gap-3">
                   {statusBadge(order.status)}
-                  <div className="text-left">
-                    <p className="font-medium text-sm text-gray-900">
-                      {order.remitoNumber ? `Remito #${order.remitoNumber}` : `Pedido #${order.id}`}
-                      {isAdmin && (order as any).revendedorName && (
-                        <span className="text-gray-400 font-normal ml-2">{(order as any).revendedorName}</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-500">{fmt(order.createdAt)} — {order.paymentType === "efectivo" ? "Efectivo -30%" : "Transferencia -25%"}</p>
-                  </div>
+<div className="text-left">
+  <p className="font-medium text-sm text-gray-900">
+    {order.remitoNumber ? `Remito #${order.remitoNumber}` : `Pedido #${order.id}`}
+    {isAdmin && (order as any).revendedorName && (
+      <span className="text-gray-400 font-normal ml-2">{(order as any).revendedorName}</span>
+    )}
+    {isAdmin && order.status === "approved" && (
+      <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${order.paid ? "bg-green-100 text-green-700 border border-green-300" : "bg-red-100 text-red-700 border border-red-300"}`}>
+        {order.paid ? "✓ Pagado" : "✗ No pagado"}
+      </span>
+    )}
+  </p>
+  <p className="text-xs text-gray-500">{fmt(order.createdAt)} — {order.paymentType === "efectivo" ? "Efectivo -30%" : "Transferencia -25%"}</p>
+</div>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="font-bold text-blue-600">{formatPrice(order.totalAmount)}</span>
@@ -250,7 +255,12 @@ export default function OrdersPage() {
                       <>
                         {(order as any).items?.map((item: any) => (
                           <div key={item.id} className="flex justify-between items-center py-1.5 text-sm border-b border-gray-100 last:border-0">
-                            <span className="flex-1 truncate text-gray-700">{item.productName}</span>
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="truncate text-gray-700">{item.productName}</span>
+                              <span className="text-xs text-blue-600 font-mono bg-blue-50 px-1.5 py-0.5 rounded">
+                                📍 {products?.find(p => p.name === item.productName)?.location || "Sin ubicación"}
+                              </span>
+                            </div>
                             <span className="text-gray-500 w-12 text-center">x{item.quantity}</span>
                             <span className="w-20 text-right text-gray-500">{formatPrice(item.price)} c/u</span>
                             <span className="w-24 text-right font-medium text-gray-900">{formatPrice(item.subtotal)}</span>

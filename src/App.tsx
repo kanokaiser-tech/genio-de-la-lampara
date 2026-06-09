@@ -8,7 +8,13 @@ import ProductsPage from "./pages/ProductsPage";
 import CartPage from "./pages/CartPage";
 import OrdersPage from "./pages/OrdersPage";
 import AdminPage from "./pages/AdminPage";
+import DeliveryPage from "@/pages/DeliveryPage";
 import GoldCoinsPage from "./pages/GoldCoinsPage";
+import ProfilePage from "@/pages/ProfilePage";
+import AdminVendorProductsPage from "@/pages/AdminVendorProductsPage";
+import VendorPublishPage from "@/pages/VendorPublishPage";
+import MarketplaceIndexPage from "@/pages/MarketplaceIndexPage";
+import MyVendorProductsPage from "@/pages/MyVendorProductsPage";
 import NotFound from "./pages/NotFound";
 
 function Protected({ children, adminOnly }: { children: React.ReactNode; adminOnly?: boolean }) {
@@ -29,7 +35,13 @@ export default function App() {
         <Route path="/pedido" element={<Protected><CartPage /></Protected>} />
         <Route path="/mis-pedidos" element={<Protected><OrdersPage /></Protected>} />
         <Route path="/monedas" element={<Protected><GoldCoinsPage /></Protected>} />
+        <Route path="/perfil" element={<Protected><ProfilePage /></Protected>} />
+        <Route path="/publicar" element={<Protected><VendorPublishPage /></Protected>} />
+        <Route path="/marketplace" element={<Protected><MarketplaceIndexPage /></Protected>} />
+        <Route path="/mis-publicaciones" element={<Protected><MyVendorProductsPage /></Protected>} />
         <Route path="/admin" element={<Protected adminOnly><AdminPage /></Protected>} />
+        <Route path="/admin/vendor-products" element={<Protected adminOnly><AdminVendorProductsPage /></Protected>} />
+        <Route path="/delivery" element={<Protected adminOnly><DeliveryPage /></Protected>} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

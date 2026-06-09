@@ -1,0 +1,150 @@
+import { z } from "zod";
+import { adminQuery, createRouter } from "./middleware";
+import { getDb } from "./queries/connection";
+import { settings } from "@db/schema";
+import { eq } from "drizzle-orm";
+
+type TnProduct = {
+  id: number;
+  name: string;
+  category: string;
+  variants: Array<{ price: string; stock: number }>;
+  images: Array<{ src: string }>;
+  handle: string;
+};
+
+export const tiendanubeRouter = createRouter({
+  sync: adminQuery.mutation(async () => {
+    const [s] = await getDb().select().from(settings).limit(1);
+    if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) {
+      throw new Error("Faltan credenciales de Tiendanube.");
+    }
+
+    const storeId = s.tiendanubeStoreId;
+    const apiToken = s.tiendanubeApiToken;
+
+    let page = 1;
+    let hasMore = true;
+    const allProducts: TnProduct[] = [];
+
+    while (hasMore) {
+      const resp = await fetch(
+        `https://api.tiendanube.com/v1/${storeId}/products?per_page=200&page=${page}`,
+        { headers: { Authentication: `bearer ${apiToken}`, "User-Agent": "Portal-Revendedores/1.0" } }
+      );
+      
+      if (!resp.ok) {
+        throw new Error(`Error ${resp.status}: ${resp.statusText}`);
+      }
+      
+      const products = await resp.json();
+      
+      // Verificar que products es un array
+      if (!Array.isArray(products)) {
+        throw new Error("La respuesta de Tiendanube no es un array");
+      }
+      
+      if (products.length === 0) {
+        hasMore = false;
+      } else {
+        allProducts.push(...products);
+        page++;
+      }
+    }
+
+    let imported = 0;
+    let updated = 0;
+
+    for (const tn of allProducts) {
+      const price = parseFloat(tn.variants[0]?.price || "0");
+      const priceCash30 = (price * 0.7).toFixed(2);
+      const priceTransfer25 = (price * 0.75).toFixed(2);
+      const stock = tn.variants[0]?.stock || 0;
+      const imageUrl = tn.images?.[0]?.src || null;
+      const slug = `${tn.id}-${tn.handle || tn.name.replace(/\s/g, "-")}`;
+
+      const [existing] = await getDb().execute(
+        `SELECT id, location FROM products WHERE tiendanubeId = ?`,
+        [tn.id]
+      );
+
+      if (existing.length > 0) {
+        const location = existing[0].location;
+        await getDb().execute(
+          `UPDATE products SET 
+            name = ?, 
+            category = ?, 
+            priceList = ?, 
+            priceCash30 = ?, 
+            priceTransfer25 = ?, 
+            stock = ?, 
+            imageUrl = ?, 
+            slug = ?,
+            active = 1,
+            location = ?
+          WHERE tiendanubeId = ?`,
+          [tn.name, tn.category || "", price, priceCash30, priceTransfer25, stock, imageUrl, slug, location || null, tn.id]
+        );
+        updated++;
+      } else {
+        await getDb().execute(
+          `INSERT INTO products 
+            (name, category, priceList, priceCash30, priceTransfer25, stock, imageUrl, slug, tiendanubeId, active) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+          [tn.name, tn.category || "", price, priceCash30, priceTransfer25, stock, imageUrl, slug, tn.id]
+        );
+        imported++;
+      }
+    }
+
+    // Marcar los últimos 5 productos como nuevos
+    await getDb().execute(`UPDATE products SET is_new = 0 WHERE is_new = 1`);
+    await getDb().execute(`
+      UPDATE products SET is_new = 1 
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id FROM products ORDER BY id DESC LIMIT 5
+        ) as tmp
+      )
+    `);
+
+    return { 
+      success: true, 
+      imported, 
+      updated, 
+      total: allProducts.length
+    };
+  }),
+
+  test: adminQuery.mutation(async () => {
+    const [s] = await getDb().select().from(settings).limit(1);
+    if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) {
+      return { error: "Faltan credenciales" };
+    }
+    try {
+      const resp = await fetch(`https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?per_page=1`, {
+        headers: { Authentication: `bearer ${s.tiendanubeApiToken}`, "User-Agent": "Portal-Revendedores/1.0" }
+      });
+      if (resp.ok) return { success: true };
+      return { error: `Error ${resp.status}` };
+    } catch (e) {
+      return { error: String(e) };
+    }
+  }),
+
+  deleteProduct: adminQuery.input(z.object({ productId: z.number() })).mutation(async ({ input }) => {
+    const [s] = await getDb().select().from(settings).limit(1);
+    if (!s?.tiendanubeApiToken || !s?.tiendanubeStoreId) throw new Error("Faltan credenciales");
+    
+    const resp = await fetch(`https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products/${input.productId}`, {
+      method: "DELETE",
+      headers: { Authentication: `bearer ${s.tiendanubeApiToken}`, "User-Agent": "Portal-Revendedores/1.0" }
+    });
+    if (!resp.ok) throw new Error(`Error ${resp.status}`);
+    return { success: true };
+  }),
+});
+  // Al inicio del sync, agregar:
+  console.log("StoreId desde BD:", s.tiendanubeStoreId);
+  console.log("ApiToken desde BD:", s.tiendanubeApiToken ? "****" : "no existe");
+  console.log("URL a llamar:", `https://api.tiendanube.com/v1/${s.tiendanubeStoreId}/products?per_page=1`);
