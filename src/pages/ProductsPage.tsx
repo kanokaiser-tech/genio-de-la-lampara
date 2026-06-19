@@ -5,8 +5,8 @@ import { formatPrice } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Search, Plus, Package, Loader2, X, Menu, ChevronRight, ImageOff, Coins, Star, Zap } from "lucide-react";
-import { useNavigate } from "react-router";
+import { ShoppingCart, Search, Plus, Package, Loader2, X, Menu, ChevronRight, ImageOff, Coins, Star, Zap, ArrowRight, Sparkles } from "lucide-react";
+import { useNavigate, Link } from "react-router";
 
 export default function ProductsPage() {
   const { user } = useAuth();
@@ -26,6 +26,7 @@ export default function ProductsPage() {
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const { data: products, isLoading } = trpc.product.list.useQuery();
+  const { data: featured } = trpc.product.featured.useQuery();
   const { data: cart } = trpc.cart.get.useQuery();
   const addCart = trpc.cart.add.useMutation({
     onSuccess: () => {
@@ -179,6 +180,52 @@ export default function ProductsPage() {
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+      )}
+
+      {/* ===== OFERTAS DE LA SEMANA ===== */}
+      {featured && featured.length > 0 && (
+        <div className="mb-6 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-yellow-500" />
+              <h2 className="font-bold text-gray-900">Ofertas de la semana</h2>
+              <span className="text-[10px] bg-yellow-500 text-white font-bold px-1.5 py-0.5 rounded">TOP</span>
+            </div>
+            <Link to="/productos" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+              Ver todo <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
+            {featured.map(offer => {
+              const stockNum = Number(offer.stock ?? 0);
+              return (
+                <Link
+                  key={offer.id}
+                  to={`/productos/${offer.id}`}
+                  className="flex-shrink-0 w-32 bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow"
+                >
+                  <div className="h-20 bg-gray-100 flex items-center justify-center overflow-hidden">
+                    {offer.imageUrl ? (
+                      <img src={offer.imageUrl} alt={offer.name} className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <ImageOff className="w-6 h-6 text-gray-300" />
+                    )}
+                  </div>
+                  <div className="p-2">
+                    <p className="text-[10px] text-gray-900 line-clamp-2 leading-tight mb-1">{offer.name}</p>
+                    <p className="text-blue-600 font-bold text-xs">{formatPrice(offer.dealPrice || offer.priceCash30)}</p>
+                    {offer.priceList && (
+                      <p className="text-[9px] text-gray-400 line-through">{formatPrice(offer.priceList)}</p>
+                    )}
+                    {stockNum <= 5 && stockNum > 0 && (
+                      <p className="text-[9px] text-orange-500 font-medium">Quedan {stockNum}!</p>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -380,13 +427,16 @@ export default function ProductsPage() {
                       ref={el => { productRefs.current[p.id] = el; }}
                       className={`bg-white border rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden ${isHighlighted ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/50 scale-[1.02]" : "border-gray-200"}`}
                     >
-                      {/* Imagen del producto */}
-                      <div className="relative w-full h-28 bg-gray-100 flex items-center justify-center overflow-hidden">
+                      {/* Imagen del producto - link a detalle */}
+                      <Link
+                        to={`/productos/${p.id}`}
+                        className="relative w-full h-28 bg-gray-100 flex items-center justify-center overflow-hidden group"
+                      >
                         {p.imageUrl ? (
                           <img
                             src={p.imageUrl}
                             alt={p.name}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             loading="lazy"
                             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                           />
@@ -402,7 +452,7 @@ export default function ProductsPage() {
                         {stockNum <= 0 && (
                           <Badge className="absolute top-1.5 right-1.5 bg-red-100 text-red-600 border-red-200 text-[9px] px-1 py-0">Sin</Badge>
                         )}
-                      </div>
+                      </Link>
                       <div className="p-2.5">
                         <p className="font-semibold text-xs text-gray-900 line-clamp-2 mb-1.5 leading-tight">{p.name}</p>
                         <div className="mb-2">
