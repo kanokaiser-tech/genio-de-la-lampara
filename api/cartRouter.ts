@@ -10,7 +10,19 @@ export const cartRouter = createRouter({
   }),
 
   add: authedQuery.input(z.object({ productId: z.number(), quantity: z.number().int().min(1) })).mutation(async ({ ctx, input }) => {
-    const existing = await getDb().select().from(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId))).limit(1);
+    // Validar stock disponible
+    const [product] = await getDb().select().from(products).where(eq(products.id, input.productId)).limit(1);
+    if (!product) throw new Error("Producto no encontrado");
+    const currentStock = Number(product.stock);
+
+    // Verificar cantidad actual en carrito
+    const [existing] = await getDb().select().from(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId))).limit(1);
+    const newQty = (existing ? existing[0].quantity : 0) + input.quantity;
+
+    if (newQty > currentStock) {
+      throw new Error(`Stock insuficiente para "${product.name}". Disponible: ${currentStock}, en tu carrito: ${existing ? existing[0].quantity : 0}`);
+    }
+
     if (existing[0]) {
       await getDb().update(cartItems).set({ quantity: existing[0].quantity + input.quantity }).where(eq(cartItems.id, existing[0].id));
     } else {
@@ -23,6 +35,13 @@ export const cartRouter = createRouter({
     if (input.quantity <= 0) {
       await getDb().delete(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId)));
     } else {
+      // Validar stock disponible
+      const [product] = await getDb().select().from(products).where(eq(products.id, input.productId)).limit(1);
+      if (!product) throw new Error("Producto no encontrado");
+      const currentStock = Number(product.stock);
+      if (input.quantity > currentStock) {
+        throw new Error(`Stock insuficiente para "${product.name}". Maximo disponible: ${currentStock}`);
+      }
       await getDb().update(cartItems).set({ quantity: input.quantity }).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId)));
     }
     return { success: true };

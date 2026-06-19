@@ -20,9 +20,9 @@ export const orderRouter = createRouter({
       const db = getDb();
       const userId = ctx.user.id;
 
-      // Get cart items with product data (including tiendanube IDs)
+      // Get cart items with product data (including tiendanube IDs and stock)
       const cartRows = await db.execute(
-        `SELECT c.*, p.name as productName, p.priceCash30, p.priceTransfer25, p.priceList, p.tiendanubeId
+        `SELECT c.*, p.name as productName, p.priceCash30, p.priceTransfer25, p.priceList, p.tiendanubeId, p.stock
          FROM cartItems c
          JOIN products p ON c.productId = p.id
          WHERE c.userId = ${userId}` as any
@@ -31,6 +31,16 @@ export const orderRouter = createRouter({
 
       if (!cartItems2 || cartItems2.length === 0) {
         throw new Error("Carrito vacio");
+      }
+
+      // VALIDAR STOCK: verificar que ningun item exceda el stock disponible
+      for (const item of cartItems2) {
+        const currentStock = Number(item.stock);
+        if (item.quantity > currentStock) {
+          throw new Error(
+            `Stock insuficiente para "${item.productName}". Disponible: ${currentStock}, solicitado: ${item.quantity}`
+          );
+        }
       }
 
       const priceField = input.paymentType === "efectivo" ? "priceCash30" : "priceTransfer25";

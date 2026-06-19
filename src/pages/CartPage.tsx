@@ -444,14 +444,15 @@ export default function CartPage() {
                 <Input
                   type="number"
                   min={1}
+                  max={item.product.stock ?? 999}
                   value={item.quantity}
                   onChange={e => {
                     const val = parseInt(e.target.value);
-                    if (!isNaN(val) && val >= 1) updateQty.mutate({ productId: item.productId, quantity: val });
+                    if (!isNaN(val) && val >= 1 && val <= (item.product.stock ?? 999)) updateQty.mutate({ productId: item.productId, quantity: val });
                   }}
                   className="w-14 h-8 text-center text-sm p-0 bg-gray-50 border-gray-200"
                 />
-                <button onClick={() => updateQty.mutate({ productId: item.productId, quantity: item.quantity + 1 })} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 text-lg font-bold">+</button>
+                <button onClick={() => { if (item.quantity < (item.product.stock ?? 999)) updateQty.mutate({ productId: item.productId, quantity: item.quantity + 1 }); }} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 text-lg font-bold">+</button>
               </div>
               <p className="font-semibold text-sm w-24 text-right text-gray-900">{formatPrice(Number(item.product[priceKey]) * item.quantity)}</p>
               <button onClick={() => removeItem.mutate({ productId: item.productId })} className="p-2 text-gray-400 hover:text-red-500 text-sm">Eliminar</button>
