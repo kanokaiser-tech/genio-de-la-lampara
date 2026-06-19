@@ -16,15 +16,16 @@ export const cartRouter = createRouter({
     const currentStock = Number(product.stock);
 
     // Verificar cantidad actual en carrito
-    const [existing] = await getDb().select().from(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId))).limit(1);
-    const newQty = (existing ? existing[0].quantity : 0) + input.quantity;
+    const existingRows = await getDb().select().from(cartItems).where(and(eq(cartItems.userId, ctx.user.id), eq(cartItems.productId, input.productId))).limit(1);
+    const existing = existingRows[0];
+    const newQty = (existing ? existing.quantity : 0) + input.quantity;
 
     if (newQty > currentStock) {
-      throw new Error(`Stock insuficiente para "${product.name}". Disponible: ${currentStock}, en tu carrito: ${existing ? existing[0].quantity : 0}`);
+      throw new Error(`Stock insuficiente para "${product.name}". Disponible: ${currentStock}, en tu carrito: ${existing ? existing.quantity : 0}`);
     }
 
-    if (existing[0]) {
-      await getDb().update(cartItems).set({ quantity: existing[0].quantity + input.quantity }).where(eq(cartItems.id, existing[0].id));
+    if (existing) {
+      await getDb().update(cartItems).set({ quantity: existing.quantity + input.quantity }).where(eq(cartItems.id, existing.id));
     } else {
       await getDb().insert(cartItems).values({ userId: ctx.user.id, productId: input.productId, quantity: input.quantity });
     }
